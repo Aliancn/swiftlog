@@ -74,9 +74,9 @@ temp/
 # ai tools
 CLAUDE.md 
 GEMINI.md
-.gemini 
-.claude 
-.specify
+.gemini/ 
+.claude/ 
+.specify/
 specs/
 
 # Generated protobuf code (keep in repo for convenience)
