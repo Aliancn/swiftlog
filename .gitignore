@@ -1,0 +1,84 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+swiftlog
+cli/swiftlog
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Docker
+docker/data/
+
+# Temporary files
+tmp/
+temp/
+
+# ai tools
+CLAUDE.md 
+GEMINI.md
+.gemini 
+.claude 
+.specify
+specs/
+
+# Generated protobuf code (keep in repo for convenience)
+# backend/proto/*.pb.go
+# backend/proto/*_grpc.pb.go

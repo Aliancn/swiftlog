@@ -1,0 +1,65 @@
+// logstreamer.proto
+syntax = "proto3";
+
+package swiftlog.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/aliancn/swiftlog/cli/proto";
+
+// LogStreamer service definition
+service LogStreamer {
+  // The client calls this method to start a bidirectional stream.
+  rpc StreamLog(stream StreamLogRequest) returns (stream StreamLogResponse);
+}
+
+// Message from client to server
+message StreamLogRequest {
+  oneof event {
+    // Must be the first message sent by the client.
+    StreamMetadata metadata = 1;
+    // Subsequent log lines.
+    LogLine line = 2;
+    // Sent by the client (in 'run' mode) when the command finishes.
+    StreamCompletion completion = 3;
+  }
+}
+
+// Completion message sent by the client.
+message StreamCompletion {
+  int32 exit_code = 1; // The captured exit code of the script.
+}
+
+// Message from server to client
+message StreamLogResponse {
+  oneof event {
+    // The first response from the server after creating the run.
+    StreamStarted started = 1;
+    // For future use (e.g., server-side errors).
+    string error = 2;
+  }
+}
+
+// Metadata sent by the client.
+message StreamMetadata {
+  // If provided, this project name is used. If not, the server
+  // may associate the run with a default project based on the API Token.
+  string project_name = 1;
+  string group_name = 2; // The group name for the run.
+}
+
+// A single log line sent by the client.
+message LogLine {
+  google.protobuf.Timestamp timestamp = 1;
+  enum Level {
+    STDOUT = 0;
+    STDERR = 1;
+  }
+  Level level = 2;
+  string content = 3;
+}
+
+// Server confirmation that the stream has been initiated.
+message StreamStarted {
+  string run_id = 1; // The unique ID for this run.
+}
