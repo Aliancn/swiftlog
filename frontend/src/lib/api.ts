@@ -138,6 +138,32 @@ class APIClient {
     return this.request('/auth/users');
   }
 
+  // Status
+  async getStatistics(): Promise<{
+    run_statistics: {
+      running: number;
+      completed: number;
+      failed: number;
+      aborted: number;
+      total: number;
+    };
+    ai_statistics: {
+      pending: number;
+      processing: number;
+      completed: number;
+      failed: number;
+      total: number;
+    };
+    queue_length: number;
+  }> {
+    return this.request('/status/statistics');
+  }
+
+  async getRecentRuns(limit?: number): Promise<PaginatedResponse<LogRun>> {
+    const query = limit ? `?limit=${limit}` : '';
+    return this.request(`/status/recent${query}`);
+  }
+
   logout() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('swiftlog_token');

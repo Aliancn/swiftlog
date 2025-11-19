@@ -98,6 +98,7 @@ services:
     environment:
       DATABASE_URL: postgres://swiftlog:${POSTGRES_PASSWORD:-changeme}@postgres:5432/swiftlog?sslmode=disable
       LOKI_URL: http://loki:3100
+      REDIS_URL: redis://redis:6379
       API_PORT: 8080
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
       ENVIRONMENT: ${ENVIRONMENT:-production}
@@ -108,6 +109,8 @@ services:
       postgres:
         condition: service_healthy
       loki:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     networks:

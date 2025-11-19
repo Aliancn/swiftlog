@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/aliancn/swiftlog/backend/internal/loki"
+	"github.com/aliancn/swiftlog/backend/internal/models"
+	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -16,6 +18,7 @@ type RunsHandler struct {
 	groupRepo   *repository.LogGroupRepository
 	projectRepo *repository.ProjectRepository
 	lokiClient  *loki.Client
+	taskQueue   *queue.Queue
 }
 
 // NewRunsHandler creates a new runs handler
@@ -24,12 +27,14 @@ func NewRunsHandler(
 	groupRepo *repository.LogGroupRepository,
 	projectRepo *repository.ProjectRepository,
 	lokiClient *loki.Client,
+	taskQueue *queue.Queue,
 ) *RunsHandler {
 	return &RunsHandler{
 		logRunRepo:  logRunRepo,
 		groupRepo:   groupRepo,
 		projectRepo: projectRepo,
 		lokiClient:  lokiClient,
+		taskQueue:   taskQueue,
 	}
 }
 
@@ -194,8 +199,18 @@ func (h *RunsHandler) TriggerAIAnalysis(c *gin.Context) {
 		return
 	}
 
-	// TODO: Publish message to Redis for AI worker to pick up
-	// For now, just return success
+	// Update AI status to pending in database
+	if err := h.logRunRepo.UpdateAIStatus(c.Request.Context(), runID, models.AIStatusPending); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update AI status"})
+		return
+	}
+
+	// Publish task to Redis queue for AI worker
+	if err := h.taskQueue.PublishAITask(c.Request.Context(), runID, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to queue AI analysis"})
+		return
+	}
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "AI analysis queued",
 		"run_id":  runID.String(),

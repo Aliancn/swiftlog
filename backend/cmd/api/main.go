@@ -15,9 +15,11 @@ import (
 	"github.com/aliancn/swiftlog/backend/internal/auth"
 	"github.com/aliancn/swiftlog/backend/internal/database"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
+	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -26,6 +28,7 @@ func main() {
 	// Load configuration from environment
 	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
 	lokiURL := getEnv("LOKI_URL", "http://localhost:3100")
+	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
 	apiPort := getEnv("API_PORT", "8080")
 	environment := getEnv("ENVIRONMENT", "development")
 
@@ -49,6 +52,21 @@ func main() {
 		Timeout: 10 * time.Second,
 	})
 
+	// Initialize Redis client
+	log.Println("Connecting to Redis...")
+	redisOpt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("Failed to parse Redis URL: %v", err)
+	}
+	redisClient := redis.NewClient(redisOpt)
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer redisClient.Close()
+
+	// Initialize task queue
+	taskQueue := queue.NewQueue(redisClient)
+
 	// Initialize repositories
 	projectRepo := repository.NewProjectRepository(db.DB)
 	groupRepo := repository.NewLogGroupRepository(db.DB)
@@ -67,8 +85,9 @@ func main() {
 	// Initialize handlers
 	projectsHandler := handlers.NewProjectsHandler(projectRepo, groupRepo)
 	groupsHandler := handlers.NewGroupsHandler(groupRepo, projectRepo)
-	runsHandler := handlers.NewRunsHandler(logRunRepo, groupRepo, projectRepo, lokiClient)
+	runsHandler := handlers.NewRunsHandler(logRunRepo, groupRepo, projectRepo, lokiClient, taskQueue)
 	authHandler := handlers.NewAuthHandler(userRepo, tokenService)
+	statusHandler := handlers.NewStatusHandler(logRunRepo, taskQueue)
 
 	// Create Gin router
 	router := gin.Default()
@@ -106,6 +125,10 @@ func main() {
 		v1.GET("/groups/:id/runs", runsHandler.ListRuns)
 		v1.GET("/runs/:id", runsHandler.GetRun)
 		v1.GET("/runs/:id/logs", runsHandler.GetRunLogs)
+
+		// Status endpoints (no auth required for development)
+		v1.GET("/status/statistics", statusHandler.GetStatistics)
+		v1.GET("/status/recent", statusHandler.GetRecentRuns)
 
 		// Protected endpoints (auth required)
 		protected := v1.Group("")

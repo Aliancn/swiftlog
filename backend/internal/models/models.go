@@ -119,3 +119,18 @@ type LogLine struct {
 	Level     string    `json:"level"` // "stdout" or "stderr"
 	Content   string    `json:"content"`
 }
+
+// StatusStatistics provides overall statistics for runs and AI tasks
+type StatusStatistics struct {
+	// Run statistics
+	RunningCount   int `json:"running_count"`
+	CompletedCount int `json:"completed_count"`
+	FailedCount    int `json:"failed_count"`
+	AbortedCount   int `json:"aborted_count"`
+
+	// AI analysis statistics
+	AIPendingCount    int `json:"ai_pending_count"`
+	AIProcessingCount int `json:"ai_processing_count"`
+	AICompletedCount  int `json:"ai_completed_count"`
+	AIFailedCount     int `json:"ai_failed_count"`
+}

@@ -14,7 +14,9 @@ import (
 	"github.com/aliancn/swiftlog/backend/internal/database"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
 	"github.com/aliancn/swiftlog/backend/internal/models"
+	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -71,9 +73,12 @@ func main() {
 	// Initialize repository
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 
+	// Initialize task queue
+	taskQueue := queue.NewQueue(redisClient)
+
 	// Start worker
 	log.Println("Starting AI Worker...")
-	worker := NewWorker(logRunRepo, lokiClient, analyzer, redisClient)
+	worker := NewWorker(logRunRepo, lokiClient, analyzer, redisClient, taskQueue)
 	go worker.Run(ctx)
 
 	// Wait for interrupt signal
@@ -93,6 +98,7 @@ type Worker struct {
 	lokiClient  *loki.Client
 	analyzer    *ai.Analyzer
 	redisClient *redis.Client
+	taskQueue   *queue.Queue
 }
 
 // NewWorker creates a new AI worker
@@ -101,47 +107,66 @@ func NewWorker(
 	lokiClient *loki.Client,
 	analyzer *ai.Analyzer,
 	redisClient *redis.Client,
+	taskQueue *queue.Queue,
 ) *Worker {
 	return &Worker{
 		logRunRepo:  logRunRepo,
 		lokiClient:  lokiClient,
 		analyzer:    analyzer,
 		redisClient: redisClient,
+		taskQueue:   taskQueue,
 	}
 }
 
-// Run starts the worker loop
+// Run starts the worker loop using event-driven architecture
 func (w *Worker) Run(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	log.Println("Worker running, polling for pending AI jobs...")
+	log.Println("Worker running, waiting for AI analysis tasks from queue...")
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			if err := w.processPendingJobs(ctx); err != nil {
-				log.Printf("Error processing jobs: %v", err)
+		default:
+			// Block and wait for task from Redis queue (5 second timeout)
+			task, err := w.taskQueue.ConsumeAITask(ctx, 5*time.Second)
+			if err != nil {
+				log.Printf("Error consuming task: %v", err)
+				continue
+			}
+
+			// No task available (timeout), continue waiting
+			if task == nil {
+				continue
+			}
+
+			log.Printf("Received task for run %s", task.RunID)
+
+			// Process the task
+			if err := w.processRunByID(ctx, task.RunID); err != nil {
+				log.Printf("Failed to process run %s: %v", task.RunID, err)
+				// Notify failure
+				_ = w.taskQueue.NotifyAIResult(ctx, task.RunID, "failed", err.Error())
+			} else {
+				// Notify success
+				_ = w.taskQueue.NotifyAIResult(ctx, task.RunID, "completed", "Analysis completed successfully")
 			}
 		}
 	}
 }
 
-// processPendingJobs finds and processes runs with pending AI analysis
-func (w *Worker) processPendingJobs(ctx context.Context) error {
-	rows, err := w.logRunRepo.ListPendingAIJobs(ctx, 5)
+// processRunByID fetches a run by ID and processes it
+func (w *Worker) processRunByID(ctx context.Context, runID uuid.UUID) error {
+	run, err := w.logRunRepo.GetByID(ctx, runID)
 	if err != nil {
-		return fmt.Errorf("failed to query pending jobs: %w", err)
+		// Mark as failed in database
+		_ = w.logRunRepo.UpdateAIReport(ctx, runID, fmt.Sprintf("Error: Run not found: %v", err), models.AIStatusFailed)
+		return fmt.Errorf("failed to get run: %w", err)
 	}
 
-	for _, run := range rows {
-		if err := w.processRun(ctx, run); err != nil {
-			log.Printf("Failed to process run %s: %v", run.ID, err)
-			// Mark as failed
-			_ = w.logRunRepo.UpdateAIReport(ctx, run.ID, fmt.Sprintf("Error: %v", err), models.AIStatusFailed)
-		}
+	if err := w.processRun(ctx, run); err != nil {
+		// Mark as failed in database
+		_ = w.logRunRepo.UpdateAIReport(ctx, runID, fmt.Sprintf("Error: %v", err), models.AIStatusFailed)
+		return err
 	}
 
 	return nil

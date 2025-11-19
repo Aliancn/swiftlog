@@ -197,3 +197,86 @@ func (r *LogRunRepository) ListPendingAIJobs(ctx context.Context, limit int) ([]
 
 	return runs, nil
 }
+
+// GetStatusStatistics retrieves overall statistics for log runs and AI analysis
+func (r *LogRunRepository) GetStatusStatistics(ctx context.Context) (*models.StatusStatistics, error) {
+	stats := &models.StatusStatistics{}
+
+	// Get run status counts
+	query := `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'running') as running,
+			COUNT(*) FILTER (WHERE status = 'completed') as completed,
+			COUNT(*) FILTER (WHERE status = 'failed') as failed,
+			COUNT(*) FILTER (WHERE status = 'aborted') as aborted
+		FROM log_runs
+	`
+	err := r.db.QueryRowContext(ctx, query).Scan(
+		&stats.RunningCount,
+		&stats.CompletedCount,
+		&stats.FailedCount,
+		&stats.AbortedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get run statistics: %w", err)
+	}
+
+	// Get AI status counts
+	aiQuery := `
+		SELECT
+			COUNT(*) FILTER (WHERE ai_status = 'pending') as pending,
+			COUNT(*) FILTER (WHERE ai_status = 'processing') as processing,
+			COUNT(*) FILTER (WHERE ai_status = 'completed') as completed,
+			COUNT(*) FILTER (WHERE ai_status = 'failed') as failed
+		FROM log_runs
+	`
+	err = r.db.QueryRowContext(ctx, aiQuery).Scan(
+		&stats.AIPendingCount,
+		&stats.AIProcessingCount,
+		&stats.AICompletedCount,
+		&stats.AIFailedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AI statistics: %w", err)
+	}
+
+	return stats, nil
+}
+
+// ListRecentRuns retrieves the most recent log runs across all groups
+func (r *LogRunRepository) ListRecentRuns(ctx context.Context, limit int) ([]*models.LogRun, error) {
+	query := `
+		SELECT id, group_id, start_time, end_time, status, exit_code, ai_report, ai_status, created_at, updated_at
+		FROM log_runs
+		ORDER BY start_time DESC
+		LIMIT $1
+	`
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*models.LogRun
+	for rows.Next() {
+		run := &models.LogRun{}
+		err := rows.Scan(
+			&run.ID,
+			&run.GroupID,
+			&run.StartTime,
+			&run.EndTime,
+			&run.Status,
+			&run.ExitCode,
+			&run.AIReport,
+			&run.AIStatus,
+			&run.CreatedAt,
+			&run.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan log run: %w", err)
+		}
+		runs = append(runs, run)
+	}
+
+	return runs, nil
+}

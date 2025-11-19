@@ -75,6 +75,12 @@ export default function Navigation() {
             >
               Dashboard
             </Link>
+            <Link
+              href="/status"
+              className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors"
+            >
+              Status
+            </Link>
             {isLoggedIn && (
               <>
                 <Link

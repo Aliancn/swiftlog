@@ -141,3 +141,31 @@ export function useAIReport(id: string | null): UseDataResult<{ report: string; 
     }
   );
 }
+
+export function useStatistics(): UseDataResult<{
+  run_statistics: {
+    running: number;
+    completed: number;
+    failed: number;
+    aborted: number;
+    total: number;
+  };
+  ai_statistics: {
+    pending: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    total: number;
+  };
+  queue_length: number;
+}> {
+  return useData('statistics', function fetchStatistics() {
+    return api.getStatistics();
+  });
+}
+
+export function useRecentRuns(limit?: number): UseDataResult<PaginatedResponse<LogRun>> {
+  return useData(`recent-runs-${limit || 20}`, function fetchRecentRuns() {
+    return api.getRecentRuns(limit);
+  });
+}
