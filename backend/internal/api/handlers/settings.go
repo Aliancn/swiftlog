@@ -59,6 +59,7 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 		AIMaxLogLines         int                      `json:"ai_max_log_lines" binding:"required,min=1"`
 		AILogTruncateStrategy models.TruncateStrategy `json:"ai_log_truncate_strategy" binding:"required"`
 		AISystemPrompt        string                   `json:"ai_system_prompt" binding:"required"`
+		AIMaxConcurrent       int                      `json:"ai_max_concurrent" binding:"required,min=1,max=10"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -84,6 +85,7 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 		AIMaxLogLines:         req.AIMaxLogLines,
 		AILogTruncateStrategy: req.AILogTruncateStrategy,
 		AISystemPrompt:        req.AISystemPrompt,
+		AIMaxConcurrent:       req.AIMaxConcurrent,
 	}
 
 	// Update API key if provided

@@ -110,13 +110,28 @@ func NewWorker(
 	}
 }
 
-// Run starts the worker loop using event-driven architecture
+// Run starts the worker loop using event-driven architecture with concurrent workers
 func (w *Worker) Run(ctx context.Context) {
-	log.Println("Worker running, waiting for AI analysis tasks from queue...")
+	// Use a fixed number of concurrent workers
+	// This can be made configurable in the future
+	const maxConcurrentWorkers = 10
 
+	log.Printf("Starting %d concurrent workers for AI analysis...", maxConcurrentWorkers)
+
+	// Create a channel to distribute tasks to workers
+	taskChan := make(chan *queue.AIAnalysisTask, maxConcurrentWorkers*2)
+
+	// Start worker goroutines
+	for i := 0; i < maxConcurrentWorkers; i++ {
+		go w.worker(ctx, i+1, taskChan)
+	}
+
+	// Main loop: consume tasks from Redis and distribute to workers
+	log.Println("Worker dispatcher running, waiting for AI analysis tasks from queue...")
 	for {
 		select {
 		case <-ctx.Done():
+			close(taskChan)
 			return
 		default:
 			// Block and wait for task from Redis queue (5 second timeout)
@@ -131,14 +146,41 @@ func (w *Worker) Run(ctx context.Context) {
 				continue
 			}
 
-			log.Printf("Received task for run %s (user %s)", task.RunID, task.UserID)
+			// Send task to worker channel
+			select {
+			case taskChan <- task:
+				// Task sent successfully
+			case <-ctx.Done():
+				close(taskChan)
+				return
+			}
+		}
+	}
+}
+
+// worker processes tasks from the task channel
+func (w *Worker) worker(ctx context.Context, workerID int, taskChan <-chan *queue.AIAnalysisTask) {
+	log.Printf("Worker #%d started", workerID)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Worker #%d shutting down", workerID)
+			return
+		case task, ok := <-taskChan:
+			if !ok {
+				log.Printf("Worker #%d task channel closed, shutting down", workerID)
+				return
+			}
+
+			log.Printf("Worker #%d processing task for run %s (user %s)", workerID, task.RunID, task.UserID)
 
 			// Process the task with user settings
 			if err := w.processRunByID(ctx, task.RunID, task.UserID); err != nil {
-				log.Printf("Failed to process run %s: %v", task.RunID, err)
+				log.Printf("Worker #%d failed to process run %s: %v", workerID, task.RunID, err)
 				// Notify failure
 				_ = w.taskQueue.NotifyAIResult(ctx, task.RunID, "failed", err.Error())
 			} else {
+				log.Printf("Worker #%d completed run %s successfully", workerID, task.RunID)
 				// Notify success
 				_ = w.taskQueue.NotifyAIResult(ctx, task.RunID, "completed", "Analysis completed successfully")
 			}

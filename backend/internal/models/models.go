@@ -160,6 +160,7 @@ type UserSettings struct {
 	AIMaxLogLines         int              `json:"ai_max_log_lines" db:"ai_max_log_lines"`
 	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy" db:"ai_log_truncate_strategy"`
 	AISystemPrompt        string           `json:"ai_system_prompt" db:"ai_system_prompt"`
+	AIMaxConcurrent       int              `json:"ai_max_concurrent" db:"ai_max_concurrent"`
 
 	// Metadata
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
@@ -181,6 +182,7 @@ type ProjectSettings struct {
 	AIMaxLogLines         *int              `json:"ai_max_log_lines,omitempty" db:"ai_max_log_lines"`
 	AILogTruncateStrategy *TruncateStrategy `json:"ai_log_truncate_strategy,omitempty" db:"ai_log_truncate_strategy"`
 	AISystemPrompt        *string           `json:"ai_system_prompt,omitempty" db:"ai_system_prompt"`
+	AIMaxConcurrent       *int              `json:"ai_max_concurrent,omitempty" db:"ai_max_concurrent"`
 
 	// Metadata
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
@@ -199,6 +201,7 @@ type EffectiveSettings struct {
 	AIMaxLogLines         int              `json:"ai_max_log_lines"`
 	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy"`
 	AISystemPrompt        string           `json:"ai_system_prompt"`
+	AIMaxConcurrent       int              `json:"ai_max_concurrent"`
 
 	// Source indicator
 	Source string `json:"source"` // "user", "project", "merged"

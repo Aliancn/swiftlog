@@ -84,6 +84,7 @@ export interface UserSettings {
   ai_max_log_lines: number;
   ai_log_truncate_strategy: TruncateStrategy;
   ai_system_prompt: string;
+  ai_max_concurrent: number;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +100,7 @@ export interface ProjectSettings {
   ai_max_log_lines?: number;
   ai_log_truncate_strategy?: TruncateStrategy;
   ai_system_prompt?: string;
+  ai_max_concurrent?: number;
   created_at: string;
   updated_at: string;
 }
@@ -112,5 +114,6 @@ export interface EffectiveSettings {
   ai_max_log_lines: number;
   ai_log_truncate_strategy: TruncateStrategy;
   ai_system_prompt: string;
+  ai_max_concurrent: number;
   source: 'user' | 'project' | 'merged';
 }

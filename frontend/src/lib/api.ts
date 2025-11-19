@@ -179,6 +179,7 @@ class APIClient {
     ai_max_log_lines: number;
     ai_log_truncate_strategy: TruncateStrategy;
     ai_system_prompt: string;
+    ai_max_concurrent: number;
   }): Promise<{ settings: UserSettings; has_api_key: boolean }> {
     return this.request('/settings', {
       method: 'PUT',

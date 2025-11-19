@@ -24,6 +24,7 @@ export default function SettingsPage() {
     ai_max_log_lines: 1000,
     ai_log_truncate_strategy: TruncateStrategy.Tail,
     ai_system_prompt: '',
+    ai_max_concurrent: 3,
   });
 
   const [showApiKey, setShowApiKey] = useState(false);
@@ -42,6 +43,7 @@ export default function SettingsPage() {
         ai_max_log_lines: data.settings.ai_max_log_lines,
         ai_log_truncate_strategy: data.settings.ai_log_truncate_strategy,
         ai_system_prompt: data.settings.ai_system_prompt,
+        ai_max_concurrent: data.settings.ai_max_concurrent,
       });
     }
   }, [data]);
@@ -250,6 +252,21 @@ export default function SettingsPage() {
               <option value={TruncateStrategy.Smart}>Smart - Keep head + tail with summary</option>
             </select>
             <p className="text-sm text-gray-500 mt-1">How to handle logs exceeding max lines</p>
+          </div>
+
+          {/* Max Concurrent */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Max Concurrent Analyses</label>
+            <input
+              type="number"
+              value={formData.ai_max_concurrent}
+              onChange={(e) => setFormData({ ...formData, ai_max_concurrent: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="1"
+              max="10"
+              required
+            />
+            <p className="text-sm text-gray-500 mt-1">Maximum number of concurrent AI analysis tasks (1-10)</p>
           </div>
 
           {/* System Prompt */}
