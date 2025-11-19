@@ -1,13 +1,16 @@
 package ingestor
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	"github.com/aliancn/swiftlog/backend/internal/auth"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
 	"github.com/aliancn/swiftlog/backend/internal/models"
+	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
 	pb "github.com/aliancn/swiftlog/backend/proto"
 	"google.golang.org/grpc/codes"
@@ -20,7 +23,9 @@ type Service struct {
 	logRunRepo    *repository.LogRunRepository
 	projectRepo   *repository.ProjectRepository
 	groupRepo     *repository.LogGroupRepository
+	settingsRepo  *repository.SettingsRepository
 	lokiClient    *loki.Client
+	taskQueue     *queue.Queue
 	batchSize     int
 	batchInterval time.Duration
 }
@@ -30,7 +35,9 @@ type Config struct {
 	LogRunRepo    *repository.LogRunRepository
 	ProjectRepo   *repository.ProjectRepository
 	GroupRepo     *repository.LogGroupRepository
+	SettingsRepo  *repository.SettingsRepository
 	LokiClient    *loki.Client
+	TaskQueue     *queue.Queue
 	BatchSize     int           // Number of log lines to batch before sending to Loki
 	BatchInterval time.Duration // Maximum time to wait before sending a batch
 }
@@ -48,7 +55,9 @@ func NewService(cfg *Config) *Service {
 		logRunRepo:    cfg.LogRunRepo,
 		projectRepo:   cfg.ProjectRepo,
 		groupRepo:     cfg.GroupRepo,
+		settingsRepo:  cfg.SettingsRepo,
 		lokiClient:    cfg.LokiClient,
+		taskQueue:     cfg.TaskQueue,
 		batchSize:     cfg.BatchSize,
 		batchInterval: cfg.BatchInterval,
 	}
@@ -95,8 +104,21 @@ func (s *Service) StreamLog(stream pb.LogStreamer_StreamLogServer) error {
 		return status.Errorf(codes.Internal, "failed to get/create group: %v", err)
 	}
 
-	// Create log run
-	logRun, err := s.logRunRepo.Create(ctx, group.ID)
+	// Get effective settings for this user/project to determine initial AI status
+	effectiveSettings, err := s.settingsRepo.GetEffectiveSettings(ctx, project.ID, userID)
+	if err != nil {
+		log.Printf("Warning: failed to get effective settings for user %s, project %s: %v. Using AIStatusNone.", userID, project.ID, err)
+		effectiveSettings = nil
+	}
+
+	// Determine initial AI status based on auto-analyze setting
+	initialAIStatus := models.AIStatusNone
+	if effectiveSettings != nil && effectiveSettings.AIEnabled && effectiveSettings.AIAutoAnalyze {
+		initialAIStatus = models.AIStatusPending
+	}
+
+	// Create log run with appropriate AI status
+	logRun, err := s.logRunRepo.Create(ctx, group.ID, initialAIStatus)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to create log run: %v", err)
 	}
@@ -188,6 +210,14 @@ func (s *Service) StreamLog(stream pb.LogStreamer_StreamLogServer) error {
 
 				if err := s.logRunRepo.UpdateStatus(ctx, logRun.ID, runStatus, &exitCode); err != nil {
 					return status.Errorf(codes.Internal, "failed to update run status: %v", err)
+				}
+
+				// Trigger AI analysis if auto-analyze is enabled and AI status is pending
+				if logRun.AIStatus == models.AIStatusPending && s.taskQueue != nil {
+					log.Printf("Auto-triggering AI analysis for run %s (user %s)", logRun.ID, userID)
+					if err := s.taskQueue.PublishAITask(context.Background(), logRun.ID, userID); err != nil {
+						log.Printf("Warning: failed to publish AI task for run %s: %v", logRun.ID, err)
+					}
 				}
 
 				return nil

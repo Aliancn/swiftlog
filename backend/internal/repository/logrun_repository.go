@@ -20,15 +20,15 @@ func NewLogRunRepository(db *sql.DB) *LogRunRepository {
 	return &LogRunRepository{db: db}
 }
 
-// Create creates a new log run
-func (r *LogRunRepository) Create(ctx context.Context, groupID uuid.UUID) (*models.LogRun, error) {
+// Create creates a new log run with the specified initial AI status
+func (r *LogRunRepository) Create(ctx context.Context, groupID uuid.UUID, initialAIStatus models.AIStatus) (*models.LogRun, error) {
 	run := &models.LogRun{}
 	query := `
 		INSERT INTO log_runs (group_id, start_time, status, ai_status)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, group_id, start_time, end_time, status, exit_code, ai_report, ai_status, created_at, updated_at
 	`
-	err := r.db.QueryRowContext(ctx, query, groupID, time.Now(), models.RunStatusRunning, models.AIStatusPending).Scan(
+	err := r.db.QueryRowContext(ctx, query, groupID, time.Now(), models.RunStatusRunning, initialAIStatus).Scan(
 		&run.ID,
 		&run.GroupID,
 		&run.StartTime,

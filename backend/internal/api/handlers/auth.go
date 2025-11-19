@@ -11,14 +11,20 @@ import (
 
 // AuthHandler handles authentication-related API requests
 type AuthHandler struct {
-	userRepo  *repository.UserRepository
+	userRepo     *repository.UserRepository
+	settingsRepo *repository.SettingsRepository
 	tokenService *auth.TokenService
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(userRepo *repository.UserRepository, tokenService *auth.TokenService) *AuthHandler {
+func NewAuthHandler(
+	userRepo *repository.UserRepository,
+	settingsRepo *repository.SettingsRepository,
+	tokenService *auth.TokenService,
+) *AuthHandler {
 	return &AuthHandler{
-		userRepo:  userRepo,
+		userRepo:     userRepo,
+		settingsRepo: settingsRepo,
 		tokenService: tokenService,
 	}
 }
@@ -92,6 +98,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
+	}
+
+	// Create default settings for new user
+	_, err = h.settingsRepo.CreateDefaultUserSettings(c.Request.Context(), user.ID)
+	if err != nil {
+		// Log error but don't fail registration
+		// User can configure settings later
+		c.Request.Context().Value("logger")
 	}
 
 	// Create API token for session

@@ -28,14 +28,6 @@ func main() {
 	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
 	lokiURL := getEnv("LOKI_URL", "http://localhost:3100")
 	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
-	openAIKey := getEnv("OPENAI_API_KEY", "")
-	openAIBaseURL := getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-	openAIModel := getEnv("OPENAI_MODEL", "gpt-4o-mini")
-	maxTokens := 500
-
-	if openAIKey == "" {
-		log.Fatal("OPENAI_API_KEY environment variable is required")
-	}
 
 	// Initialize database connection
 	log.Println("Connecting to database...")
@@ -60,25 +52,19 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// Initialize AI analyzer
-	log.Println("Initializing AI analyzer...")
-	log.Printf("Using OpenAI endpoint: %s", openAIBaseURL)
-	analyzer := ai.NewAnalyzer(&ai.Config{
-		APIKey:    openAIKey,
-		BaseURL:   openAIBaseURL,
-		Model:     openAIModel,
-		MaxTokens: maxTokens,
-	})
-
-	// Initialize repository
+	// Initialize repositories
 	logRunRepo := repository.NewLogRunRepository(db.DB)
+	groupRepo := repository.NewLogGroupRepository(db.DB)
+	projectRepo := repository.NewProjectRepository(db.DB)
+	settingsRepo := repository.NewSettingsRepository(db.DB)
 
 	// Initialize task queue
 	taskQueue := queue.NewQueue(redisClient)
 
 	// Start worker
 	log.Println("Starting AI Worker...")
-	worker := NewWorker(logRunRepo, lokiClient, analyzer, redisClient, taskQueue)
+	log.Println("AI settings will be fetched per-user from database")
+	worker := NewWorker(logRunRepo, groupRepo, projectRepo, settingsRepo, lokiClient, redisClient, taskQueue)
 	go worker.Run(ctx)
 
 	// Wait for interrupt signal
@@ -94,27 +80,33 @@ func main() {
 
 // Worker processes AI analysis jobs
 type Worker struct {
-	logRunRepo  *repository.LogRunRepository
-	lokiClient  *loki.Client
-	analyzer    *ai.Analyzer
-	redisClient *redis.Client
-	taskQueue   *queue.Queue
+	logRunRepo   *repository.LogRunRepository
+	groupRepo    *repository.LogGroupRepository
+	projectRepo  *repository.ProjectRepository
+	settingsRepo *repository.SettingsRepository
+	lokiClient   *loki.Client
+	redisClient  *redis.Client
+	taskQueue    *queue.Queue
 }
 
 // NewWorker creates a new AI worker
 func NewWorker(
 	logRunRepo *repository.LogRunRepository,
+	groupRepo *repository.LogGroupRepository,
+	projectRepo *repository.ProjectRepository,
+	settingsRepo *repository.SettingsRepository,
 	lokiClient *loki.Client,
-	analyzer *ai.Analyzer,
 	redisClient *redis.Client,
 	taskQueue *queue.Queue,
 ) *Worker {
 	return &Worker{
-		logRunRepo:  logRunRepo,
-		lokiClient:  lokiClient,
-		analyzer:    analyzer,
-		redisClient: redisClient,
-		taskQueue:   taskQueue,
+		logRunRepo:   logRunRepo,
+		groupRepo:    groupRepo,
+		projectRepo:  projectRepo,
+		settingsRepo: settingsRepo,
+		lokiClient:   lokiClient,
+		redisClient:  redisClient,
+		taskQueue:    taskQueue,
 	}
 }
 
@@ -139,10 +131,10 @@ func (w *Worker) Run(ctx context.Context) {
 				continue
 			}
 
-			log.Printf("Received task for run %s", task.RunID)
+			log.Printf("Received task for run %s (user %s)", task.RunID, task.UserID)
 
-			// Process the task
-			if err := w.processRunByID(ctx, task.RunID); err != nil {
+			// Process the task with user settings
+			if err := w.processRunByID(ctx, task.RunID, task.UserID); err != nil {
 				log.Printf("Failed to process run %s: %v", task.RunID, err)
 				// Notify failure
 				_ = w.taskQueue.NotifyAIResult(ctx, task.RunID, "failed", err.Error())
@@ -155,7 +147,7 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 // processRunByID fetches a run by ID and processes it
-func (w *Worker) processRunByID(ctx context.Context, runID uuid.UUID) error {
+func (w *Worker) processRunByID(ctx context.Context, runID, userID uuid.UUID) error {
 	run, err := w.logRunRepo.GetByID(ctx, runID)
 	if err != nil {
 		// Mark as failed in database
@@ -163,7 +155,7 @@ func (w *Worker) processRunByID(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("failed to get run: %w", err)
 	}
 
-	if err := w.processRun(ctx, run); err != nil {
+	if err := w.processRun(ctx, run, userID); err != nil {
 		// Mark as failed in database
 		_ = w.logRunRepo.UpdateAIReport(ctx, runID, fmt.Sprintf("Error: %v", err), models.AIStatusFailed)
 		return err
@@ -172,14 +164,49 @@ func (w *Worker) processRunByID(ctx context.Context, runID uuid.UUID) error {
 	return nil
 }
 
-// processRun analyzes a single run
-func (w *Worker) processRun(ctx context.Context, run *models.LogRun) error {
-	log.Printf("Processing run %s (status: %s, exit_code: %v)", run.ID, run.Status, run.ExitCode)
+// processRun analyzes a single run using user-specific settings
+func (w *Worker) processRun(ctx context.Context, run *models.LogRun, userID uuid.UUID) error {
+	log.Printf("Processing run %s (status: %s, exit_code: %v) for user %s", run.ID, run.Status, run.ExitCode, userID)
 
 	// Update status to processing
 	if err := w.logRunRepo.UpdateAIStatus(ctx, run.ID, models.AIStatusProcessing); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
+
+	// Get the group to find the project
+	group, err := w.groupRepo.GetByID(ctx, run.GroupID)
+	if err != nil {
+		return fmt.Errorf("failed to get group: %w", err)
+	}
+
+	// Fetch effective settings for this user/project
+	effectiveSettings, err := w.settingsRepo.GetEffectiveSettings(ctx, group.ProjectID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get effective settings: %w", err)
+	}
+
+	// Check if AI is enabled
+	if !effectiveSettings.AIEnabled {
+		return fmt.Errorf("AI analysis is disabled for this user/project")
+	}
+
+	// Check API key
+	if effectiveSettings.AIAPIKey == "" {
+		return fmt.Errorf("AI API key not configured")
+	}
+
+	log.Printf("Using AI settings - Model: %s, BaseURL: %s, MaxTokens: %d, MaxLogLines: %d, Strategy: %s",
+		effectiveSettings.AIModel, effectiveSettings.AIBaseURL, effectiveSettings.AIMaxTokens,
+		effectiveSettings.AIMaxLogLines, effectiveSettings.AILogTruncateStrategy)
+
+	// Create analyzer with user-specific settings
+	analyzer := ai.NewAnalyzer(&ai.Config{
+		APIKey:       effectiveSettings.AIAPIKey,
+		BaseURL:      effectiveSettings.AIBaseURL,
+		Model:        effectiveSettings.AIModel,
+		MaxTokens:    effectiveSettings.AIMaxTokens,
+		SystemPrompt: effectiveSettings.AISystemPrompt,
+	})
 
 	// Fetch logs from Loki
 	logs, err := w.lokiClient.QueryLogs(ctx, run.ID)
@@ -203,8 +230,9 @@ func (w *Worker) processRun(ctx context.Context, run *models.LogRun) error {
 		exitCode = run.ExitCode.Int32
 	}
 
-	// Analyze logs
-	result, err := w.analyzer.AnalyzeLogs(ctx, logLines, exitCode, string(run.Status))
+	// Analyze logs with user-specific settings
+	result, err := analyzer.AnalyzeLogs(ctx, logLines, exitCode, string(run.Status),
+		effectiveSettings.AIMaxLogLines, string(effectiveSettings.AILogTruncateStrategy))
 	if err != nil {
 		return fmt.Errorf("AI analysis failed: %w", err)
 	}

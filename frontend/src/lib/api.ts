@@ -1,5 +1,5 @@
 // SwiftLog API Client
-import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse } from '@/types';
+import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse, UserSettings, ProjectSettings, EffectiveSettings, TruncateStrategy } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
@@ -162,6 +162,60 @@ class APIClient {
   async getRecentRuns(limit?: number): Promise<PaginatedResponse<LogRun>> {
     const query = limit ? `?limit=${limit}` : '';
     return this.request(`/status/recent${query}`);
+  }
+
+  // Settings
+  async getUserSettings(): Promise<{ settings: UserSettings; has_api_key: boolean }> {
+    return this.request('/settings');
+  }
+
+  async updateUserSettings(settings: {
+    ai_enabled: boolean;
+    ai_base_url: string;
+    ai_api_key?: string | null;
+    ai_model: string;
+    ai_max_tokens: number;
+    ai_auto_analyze: boolean;
+    ai_max_log_lines: number;
+    ai_log_truncate_strategy: TruncateStrategy;
+    ai_system_prompt: string;
+  }): Promise<{ settings: UserSettings; has_api_key: boolean }> {
+    return this.request('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async getProjectSettings(projectId: string): Promise<{ settings: ProjectSettings | null; has_api_key: boolean }> {
+    return this.request(`/projects/${projectId}/settings`);
+  }
+
+  async updateProjectSettings(
+    projectId: string,
+    settings: {
+      ai_enabled?: boolean | null;
+      ai_base_url?: string | null;
+      ai_api_key?: string | null;
+      ai_model?: string | null;
+      ai_max_tokens?: number | null;
+      ai_auto_analyze?: boolean | null;
+      ai_max_log_lines?: number | null;
+      ai_log_truncate_strategy?: TruncateStrategy | null;
+      ai_system_prompt?: string | null;
+    }
+  ): Promise<{ settings: ProjectSettings; has_api_key: boolean }> {
+    return this.request(`/projects/${projectId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async deleteProjectSettings(projectId: string): Promise<void> {
+    return this.request(`/projects/${projectId}/settings`, { method: 'DELETE' });
+  }
+
+  async getEffectiveSettings(projectId: string): Promise<EffectiveSettings> {
+    return this.request(`/projects/${projectId}/settings/effective`);
   }
 
   logout() {

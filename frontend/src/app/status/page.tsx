@@ -231,6 +231,7 @@ function StatusBadge({ status }: { status: RunStatus }) {
 
 function AIStatusBadge({ status }: { status: AIStatus }) {
   const styles = {
+    [AIStatus.None]: 'bg-gray-700/50 text-gray-400 border-gray-600',
     [AIStatus.Pending]: 'bg-yellow-900/50 text-yellow-300 border-yellow-700',
     [AIStatus.Processing]: 'bg-blue-900/50 text-blue-300 border-blue-700',
     [AIStatus.Completed]: 'bg-green-900/50 text-green-300 border-green-700',

@@ -8,6 +8,7 @@ export enum RunStatus {
 }
 
 export enum AIStatus {
+  None = 'none',
   Pending = 'pending',
   Processing = 'processing',
   Completed = 'completed',
@@ -64,4 +65,52 @@ export interface PaginatedResponse<T> {
 export interface APIError {
   error: string;
   message?: string;
+}
+
+export enum TruncateStrategy {
+  Head = 'head',
+  Tail = 'tail',
+  Smart = 'smart',
+}
+
+export interface UserSettings {
+  id: string;
+  user_id: string;
+  ai_enabled: boolean;
+  ai_base_url: string;
+  ai_model: string;
+  ai_max_tokens: number;
+  ai_auto_analyze: boolean;
+  ai_max_log_lines: number;
+  ai_log_truncate_strategy: TruncateStrategy;
+  ai_system_prompt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSettings {
+  id: string;
+  project_id: string;
+  ai_enabled?: boolean;
+  ai_base_url?: string;
+  ai_model?: string;
+  ai_max_tokens?: number;
+  ai_auto_analyze?: boolean;
+  ai_max_log_lines?: number;
+  ai_log_truncate_strategy?: TruncateStrategy;
+  ai_system_prompt?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EffectiveSettings {
+  ai_enabled: boolean;
+  ai_base_url: string;
+  ai_model: string;
+  ai_max_tokens: number;
+  ai_auto_analyze: boolean;
+  ai_max_log_lines: number;
+  ai_log_truncate_strategy: TruncateStrategy;
+  ai_system_prompt: string;
+  source: 'user' | 'project' | 'merged';
 }

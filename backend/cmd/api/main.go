@@ -72,13 +72,14 @@ func main() {
 	groupRepo := repository.NewLogGroupRepository(db.DB)
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 	userRepo := repository.NewUserRepository(db.DB)
+	settingsRepo := repository.NewSettingsRepository(db.DB)
 
 	// Initialize auth token service
 	tokenService := auth.NewTokenService(db.DB)
 
 	// Initialize admin user
 	log.Println("Initializing admin user...")
-	if err := initializeAdmin(ctx, userRepo, getEnv("ADMIN_USERNAME", "admin"), getEnv("ADMIN_PASSWORD", "admin123")); err != nil {
+	if err := initializeAdmin(ctx, userRepo, settingsRepo, getEnv("ADMIN_USERNAME", "admin"), getEnv("ADMIN_PASSWORD", "admin123")); err != nil {
 		log.Printf("Warning: Failed to initialize admin user: %v", err)
 	}
 
@@ -86,8 +87,9 @@ func main() {
 	projectsHandler := handlers.NewProjectsHandler(projectRepo, groupRepo)
 	groupsHandler := handlers.NewGroupsHandler(groupRepo, projectRepo)
 	runsHandler := handlers.NewRunsHandler(logRunRepo, groupRepo, projectRepo, lokiClient, taskQueue)
-	authHandler := handlers.NewAuthHandler(userRepo, tokenService)
+	authHandler := handlers.NewAuthHandler(userRepo, settingsRepo, tokenService)
 	statusHandler := handlers.NewStatusHandler(logRunRepo, taskQueue)
+	settingsHandler := handlers.NewSettingsHandler(settingsRepo, projectRepo)
 
 	// Create Gin router
 	router := gin.Default()
@@ -146,6 +148,16 @@ func main() {
 			protected.GET("/auth/tokens", authHandler.ListTokens)
 			protected.POST("/auth/tokens", authHandler.CreateToken)
 			protected.DELETE("/auth/tokens/:id", authHandler.DeleteToken)
+
+			// User settings management (requires auth)
+			protected.GET("/settings", settingsHandler.GetUserSettings)
+			protected.PUT("/settings", settingsHandler.UpdateUserSettings)
+
+			// Project settings management (requires auth)
+			protected.GET("/projects/:id/settings", settingsHandler.GetProjectSettings)
+			protected.PUT("/projects/:id/settings", settingsHandler.UpdateProjectSettings)
+			protected.DELETE("/projects/:id/settings", settingsHandler.DeleteProjectSettings)
+			protected.GET("/projects/:id/settings/effective", settingsHandler.GetEffectiveSettings)
 		}
 	}
 
@@ -194,7 +206,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 // initializeAdmin creates the admin user if no users exist
-func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, username, password string) error {
+func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, settingsRepo *repository.SettingsRepository, username, password string) error {
 	// Check if any users exist
 	count, err := userRepo.Count(ctx)
 	if err != nil {
@@ -217,6 +229,12 @@ func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, u
 	admin, err := userRepo.Create(ctx, username, passwordHash, true)
 	if err != nil {
 		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	// Create default settings for admin user
+	_, err = settingsRepo.CreateDefaultUserSettings(ctx, admin.ID)
+	if err != nil {
+		log.Printf("Warning: Failed to create default settings for admin user: %v", err)
 	}
 
 	log.Printf("Admin user created: %s (ID: %s)", admin.Username, admin.ID)

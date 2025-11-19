@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { api } from './api';
-import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse } from '@/types';
+import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse, UserSettings, ProjectSettings, EffectiveSettings } from '@/types';
 
 interface UseDataResult<T> {
   data: T | undefined;
@@ -168,4 +168,28 @@ export function useRecentRuns(limit?: number): UseDataResult<PaginatedResponse<L
   return useData(`recent-runs-${limit || 20}`, function fetchRecentRuns() {
     return api.getRecentRuns(limit);
   });
+}
+
+export function useUserSettings(): UseDataResult<{ settings: UserSettings; has_api_key: boolean }> {
+  return useData('global-settings', function fetchUserSettings() {
+    return api.getUserSettings();
+  });
+}
+
+export function useProjectSettings(projectId: string | null): UseDataResult<{ settings: ProjectSettings | null; has_api_key: boolean }> {
+  return useData(
+    projectId ? `project-settings-${projectId}` : null,
+    function fetchProjectSettings() {
+      return api.getProjectSettings(projectId!);
+    }
+  );
+}
+
+export function useEffectiveSettings(projectId: string | null): UseDataResult<EffectiveSettings> {
+  return useData(
+    projectId ? `effective-settings-${projectId}` : null,
+    function fetchEffectiveSettings() {
+      return api.getEffectiveSettings(projectId!);
+    }
+  );
 }

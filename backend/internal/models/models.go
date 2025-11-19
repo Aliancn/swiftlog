@@ -56,6 +56,7 @@ const (
 type AIStatus string
 
 const (
+	AIStatusNone       AIStatus = "none"       // AI analysis is disabled
 	AIStatusPending    AIStatus = "pending"
 	AIStatusProcessing AIStatus = "processing"
 	AIStatusCompleted  AIStatus = "completed"
@@ -133,4 +134,72 @@ type StatusStatistics struct {
 	AIProcessingCount int `json:"ai_processing_count"`
 	AICompletedCount  int `json:"ai_completed_count"`
 	AIFailedCount     int `json:"ai_failed_count"`
+}
+
+// TruncateStrategy defines how to handle log truncation
+type TruncateStrategy string
+
+const (
+	TruncateHead  TruncateStrategy = "head"  // Keep first N lines
+	TruncateTail  TruncateStrategy = "tail"  // Keep last N lines
+	TruncateSmart TruncateStrategy = "smart" // Keep head + tail with summary
+)
+
+// UserSettings represents user-specific configuration
+type UserSettings struct {
+	ID     uuid.UUID `json:"id" db:"id"`
+	UserID uuid.UUID `json:"user_id" db:"user_id"`
+
+	// AI Configuration
+	AIEnabled             bool             `json:"ai_enabled" db:"ai_enabled"`
+	AIBaseURL             string           `json:"ai_base_url" db:"ai_base_url"`
+	AIAPIKey              sql.NullString   `json:"-" db:"ai_api_key"` // Never expose in JSON
+	AIModel               string           `json:"ai_model" db:"ai_model"`
+	AIMaxTokens           int              `json:"ai_max_tokens" db:"ai_max_tokens"`
+	AIAutoAnalyze         bool             `json:"ai_auto_analyze" db:"ai_auto_analyze"`
+	AIMaxLogLines         int              `json:"ai_max_log_lines" db:"ai_max_log_lines"`
+	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy" db:"ai_log_truncate_strategy"`
+	AISystemPrompt        string           `json:"ai_system_prompt" db:"ai_system_prompt"`
+
+	// Metadata
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// ProjectSettings represents project-specific configuration (overrides user settings)
+type ProjectSettings struct {
+	ID        uuid.UUID `json:"id" db:"id"`
+	ProjectID uuid.UUID `json:"project_id" db:"project_id"`
+
+	// AI Configuration (nullable = inherit from user settings)
+	AIEnabled             *bool             `json:"ai_enabled,omitempty" db:"ai_enabled"`
+	AIBaseURL             *string           `json:"ai_base_url,omitempty" db:"ai_base_url"`
+	AIAPIKey              sql.NullString    `json:"-" db:"ai_api_key"`
+	AIModel               *string           `json:"ai_model,omitempty" db:"ai_model"`
+	AIMaxTokens           *int              `json:"ai_max_tokens,omitempty" db:"ai_max_tokens"`
+	AIAutoAnalyze         *bool             `json:"ai_auto_analyze,omitempty" db:"ai_auto_analyze"`
+	AIMaxLogLines         *int              `json:"ai_max_log_lines,omitempty" db:"ai_max_log_lines"`
+	AILogTruncateStrategy *TruncateStrategy `json:"ai_log_truncate_strategy,omitempty" db:"ai_log_truncate_strategy"`
+	AISystemPrompt        *string           `json:"ai_system_prompt,omitempty" db:"ai_system_prompt"`
+
+	// Metadata
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// EffectiveSettings represents the merged configuration (project overrides user)
+type EffectiveSettings struct {
+	// AI Configuration
+	AIEnabled             bool             `json:"ai_enabled"`
+	AIBaseURL             string           `json:"ai_base_url"`
+	AIAPIKey              string           `json:"-"` // Never expose
+	AIModel               string           `json:"ai_model"`
+	AIMaxTokens           int              `json:"ai_max_tokens"`
+	AIAutoAnalyze         bool             `json:"ai_auto_analyze"`
+	AIMaxLogLines         int              `json:"ai_max_log_lines"`
+	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy"`
+	AISystemPrompt        string           `json:"ai_system_prompt"`
+
+	// Source indicator
+	Source string `json:"source"` // "user", "project", "merged"
 }

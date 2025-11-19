@@ -13,19 +13,21 @@ import (
 
 // Analyzer handles AI-powered log analysis using OpenAI API
 type Analyzer struct {
-	apiKey     string
-	baseURL    string
-	model      string
-	maxTokens  int
-	httpClient *http.Client
+	apiKey       string
+	baseURL      string
+	model        string
+	maxTokens    int
+	systemPrompt string
+	httpClient   *http.Client
 }
 
 // Config holds analyzer configuration
 type Config struct {
-	APIKey    string
-	BaseURL   string // Optional: custom OpenAI-compatible endpoint
-	Model     string
-	MaxTokens int
+	APIKey       string
+	BaseURL      string // Optional: custom OpenAI-compatible endpoint
+	Model        string
+	MaxTokens    int
+	SystemPrompt string
 }
 
 // NewAnalyzer creates a new AI analyzer
@@ -39,12 +41,16 @@ func NewAnalyzer(cfg *Config) *Analyzer {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
+	if cfg.SystemPrompt == "" {
+		cfg.SystemPrompt = "You are an expert log analyzer. Analyze the provided script execution logs and provide a concise summary highlighting key events, errors, and outcomes."
+	}
 
 	return &Analyzer{
-		apiKey:    cfg.APIKey,
-		baseURL:   cfg.BaseURL,
-		model:     cfg.Model,
-		maxTokens: cfg.MaxTokens,
+		apiKey:       cfg.APIKey,
+		baseURL:      cfg.BaseURL,
+		model:        cfg.Model,
+		maxTokens:    cfg.MaxTokens,
+		systemPrompt: cfg.SystemPrompt,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -82,9 +88,9 @@ type AnalysisResult struct {
 }
 
 // AnalyzeLogs analyzes log content and generates a report
-func (a *Analyzer) AnalyzeLogs(ctx context.Context, logs []string, exitCode int32, runStatus string) (*AnalysisResult, error) {
-	// Prepare log content (limit to prevent token overflow)
-	logContent := prepareLogs(logs, 5000) // Max 5000 lines
+func (a *Analyzer) AnalyzeLogs(ctx context.Context, logs []string, exitCode int32, runStatus string, maxLogLines int, truncateStrategy string) (*AnalysisResult, error) {
+	// Prepare log content based on user's truncation strategy
+	logContent := prepareLogs(logs, maxLogLines, truncateStrategy)
 
 	// Create prompt
 	prompt := buildPrompt(logContent, exitCode, runStatus)
@@ -95,7 +101,7 @@ func (a *Analyzer) AnalyzeLogs(ctx context.Context, logs []string, exitCode int3
 		Messages: []Message{
 			{
 				Role:    "system",
-				Content: "You are an expert log analyzer. Analyze the provided script execution logs and provide a concise summary highlighting key events, errors, and outcomes.",
+				Content: a.systemPrompt,
 			},
 			{
 				Role:    "user",
@@ -168,27 +174,51 @@ func (a *Analyzer) callOpenAI(ctx context.Context, req OpenAIRequest) (string, i
 	return report, tokensUsed, nil
 }
 
-// prepareLogs limits log content to avoid token overflow
-func prepareLogs(logs []string, maxLines int) string {
+// prepareLogs limits log content based on truncation strategy
+func prepareLogs(logs []string, maxLines int, strategy string) string {
 	if len(logs) <= maxLines {
 		return strings.Join(logs, "\n")
 	}
 
-	// Take first 40% and last 60% of logs
-	firstPart := int(float64(maxLines) * 0.4)
-	lastPart := maxLines - firstPart
-
 	var builder strings.Builder
-	for i := 0; i < firstPart; i++ {
-		builder.WriteString(logs[i])
-		builder.WriteString("\n")
-	}
 
-	builder.WriteString(fmt.Sprintf("\n... [%d lines omitted] ...\n\n", len(logs)-maxLines))
+	switch strategy {
+	case "head":
+		// Keep first N lines
+		for i := 0; i < maxLines && i < len(logs); i++ {
+			builder.WriteString(logs[i])
+			builder.WriteString("\n")
+		}
+		builder.WriteString(fmt.Sprintf("\n... [%d lines omitted] ...\n", len(logs)-maxLines))
 
-	for i := len(logs) - lastPart; i < len(logs); i++ {
-		builder.WriteString(logs[i])
-		builder.WriteString("\n")
+	case "tail":
+		// Keep last N lines
+		builder.WriteString(fmt.Sprintf("... [%d lines omitted] ...\n\n", len(logs)-maxLines))
+		for i := len(logs) - maxLines; i < len(logs); i++ {
+			builder.WriteString(logs[i])
+			builder.WriteString("\n")
+		}
+
+	case "smart":
+		// Keep first 40% and last 60% with summary
+		firstPart := int(float64(maxLines) * 0.4)
+		lastPart := maxLines - firstPart
+
+		for i := 0; i < firstPart; i++ {
+			builder.WriteString(logs[i])
+			builder.WriteString("\n")
+		}
+
+		builder.WriteString(fmt.Sprintf("\n... [%d lines omitted] ...\n\n", len(logs)-maxLines))
+
+		for i := len(logs) - lastPart; i < len(logs); i++ {
+			builder.WriteString(logs[i])
+			builder.WriteString("\n")
+		}
+
+	default:
+		// Default to tail strategy
+		return prepareLogs(logs, maxLines, "tail")
 	}
 
 	return builder.String()
