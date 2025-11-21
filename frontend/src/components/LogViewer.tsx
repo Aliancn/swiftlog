@@ -19,14 +19,23 @@ export default function LogViewer({ logs, isLive = false }: LogViewerProps) {
   }, [logs, isLive]);
 
   const getLogColor = (level: string, content: string) => {
-    // Only color as red if it's actually stderr
-    if (level === 'STDERR' || level.toUpperCase() === 'STDERR') {
+    const lowerContent = content.toLowerCase();
+
+    // Check for actual error indicators in content
+    const errorKeywords = ['error', 'failed', 'failure', 'fatal', 'panic', 'exception'];
+    const hasError = errorKeywords.some(keyword => lowerContent.includes(keyword));
+
+    // Only color as red if it's STDERR AND contains actual error keywords
+    if ((level === 'STDERR' || level.toUpperCase() === 'STDERR') && hasError) {
       return 'text-red-400';
     }
+
     // Check for warning indicators in content
-    if (content.toLowerCase().includes('warning') || content.toLowerCase().includes('warn')) {
+    if (lowerContent.includes('warning') || lowerContent.includes('warn')) {
       return 'text-yellow-400';
     }
+
+    // Default color for normal output (including STDERR status messages)
     return 'text-gray-300';
   };
 
