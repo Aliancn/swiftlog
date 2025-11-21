@@ -12,7 +12,9 @@ import (
 	"github.com/aliancn/swiftlog/backend/internal/models"
 	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
+	ws "github.com/aliancn/swiftlog/backend/internal/websocket"
 	pb "github.com/aliancn/swiftlog/backend/proto"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -25,6 +27,7 @@ type Service struct {
 	groupRepo     *repository.LogGroupRepository
 	settingsRepo  *repository.SettingsRepository
 	lokiClient    *loki.Client
+	redisClient   *redis.Client
 	taskQueue     *queue.Queue
 	batchSize     int
 	batchInterval time.Duration
@@ -37,6 +40,7 @@ type Config struct {
 	GroupRepo     *repository.LogGroupRepository
 	SettingsRepo  *repository.SettingsRepository
 	LokiClient    *loki.Client
+	RedisClient   *redis.Client
 	TaskQueue     *queue.Queue
 	BatchSize     int           // Number of log lines to batch before sending to Loki
 	BatchInterval time.Duration // Maximum time to wait before sending a batch
@@ -57,6 +61,7 @@ func NewService(cfg *Config) *Service {
 		groupRepo:     cfg.GroupRepo,
 		settingsRepo:  cfg.SettingsRepo,
 		lokiClient:    cfg.LokiClient,
+		redisClient:   cfg.RedisClient,
 		taskQueue:     cfg.TaskQueue,
 		batchSize:     cfg.BatchSize,
 		batchInterval: cfg.BatchInterval,
@@ -175,6 +180,11 @@ func (s *Service) StreamLog(stream pb.LogStreamer_StreamLogServer) error {
 				// Stream error, mark run as aborted
 				_ = flushBatch()
 				_ = s.logRunRepo.UpdateStatus(ctx, logRun.ID, models.RunStatusAborted, nil)
+
+				// Publish run status update event
+				statusStr := string(models.RunStatusAborted)
+				_ = ws.PublishRunUpdate(ctx, s.redisClient, logRun.ID, &statusStr, nil, nil, nil)
+
 				return status.Errorf(codes.Internal, "stream error: %v", err)
 			}
 
@@ -186,6 +196,12 @@ func (s *Service) StreamLog(stream pb.LogStreamer_StreamLogServer) error {
 					Line:      fmt.Sprintf("[%s] %s", line.Level.String(), line.Content),
 				}
 				logBatch = append(logBatch, entry)
+
+				// Publish log to Redis for real-time WebSocket streaming
+				_ = ws.PublishLog(ctx, s.redisClient, logRun.ID,
+					line.Timestamp.AsTime().Format(time.RFC3339Nano),
+					line.Level.String(),
+					line.Content)
 
 				// Flush if batch is full
 				if len(logBatch) >= s.batchSize {
@@ -211,6 +227,10 @@ func (s *Service) StreamLog(stream pb.LogStreamer_StreamLogServer) error {
 				if err := s.logRunRepo.UpdateStatus(ctx, logRun.ID, runStatus, &exitCode); err != nil {
 					return status.Errorf(codes.Internal, "failed to update run status: %v", err)
 				}
+
+				// Publish run status update event
+				statusStr := string(runStatus)
+				_ = ws.PublishRunUpdate(ctx, s.redisClient, logRun.ID, &statusStr, &exitCode, nil, nil)
 
 				// Trigger AI analysis if auto-analyze is enabled and AI status is pending
 				if logRun.AIStatus == models.AIStatusPending && s.taskQueue != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/aliancn/swiftlog/backend/internal/models"
 	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
+	ws "github.com/aliancn/swiftlog/backend/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -199,7 +200,13 @@ func (w *Worker) processRunByID(ctx context.Context, runID, userID uuid.UUID) er
 
 	if err := w.processRun(ctx, run, userID); err != nil {
 		// Mark as failed in database
-		_ = w.logRunRepo.UpdateAIReport(ctx, runID, fmt.Sprintf("Error: %v", err), models.AIStatusFailed)
+		errorMsg := fmt.Sprintf("Error: %v", err)
+		_ = w.logRunRepo.UpdateAIReport(ctx, runID, errorMsg, models.AIStatusFailed)
+
+		// Publish AI status update event
+		aiStatus := string(models.AIStatusFailed)
+		_ = ws.PublishRunUpdate(ctx, w.redisClient, runID, nil, nil, &aiStatus, &errorMsg)
+
 		return err
 	}
 
@@ -214,6 +221,10 @@ func (w *Worker) processRun(ctx context.Context, run *models.LogRun, userID uuid
 	if err := w.logRunRepo.UpdateAIStatus(ctx, run.ID, models.AIStatusProcessing); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
+
+	// Publish AI status update event
+	aiStatus := string(models.AIStatusProcessing)
+	_ = ws.PublishRunUpdate(ctx, w.redisClient, run.ID, nil, nil, &aiStatus, nil)
 
 	// Get the group to find the project
 	group, err := w.groupRepo.GetByID(ctx, run.GroupID)
@@ -285,6 +296,10 @@ func (w *Worker) processRun(ctx context.Context, run *models.LogRun, userID uuid
 	if err := w.logRunRepo.UpdateAIReport(ctx, run.ID, result.Report, models.AIStatusCompleted); err != nil {
 		return fmt.Errorf("failed to save report: %w", err)
 	}
+
+	// Publish AI status update event with report
+	aiStatus = string(models.AIStatusCompleted)
+	_ = ws.PublishRunUpdate(ctx, w.redisClient, run.ID, nil, nil, &aiStatus, &result.Report)
 
 	return nil
 }

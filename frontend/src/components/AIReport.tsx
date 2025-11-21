@@ -178,12 +178,34 @@ export default function AIReport({ runId, report, status, onReportGenerated }: A
               ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
               ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
               li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-              code: ({ node, inline, ...props }: any) =>
-                inline ? (
-                  <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...props} />
-                ) : (
-                  <code className="block bg-gray-100 p-3 rounded my-2 text-sm font-mono overflow-x-auto" {...props} />
-                ),
+              pre: ({ node, children, ...props }: any) => {
+                // Pre tag for code blocks
+                return (
+                  <pre className="bg-gray-100 p-3 rounded my-2 overflow-x-auto" {...props}>
+                    {children}
+                  </pre>
+                );
+              },
+              code: ({ node, className, children, ...props }: any) => {
+                // Check if this code element is inside a pre tag by checking node parent
+                const isInPre = node?.parent?.tagName === 'pre';
+
+                if (isInPre) {
+                  // Code block inside pre - minimal styling
+                  return (
+                    <code className="text-sm font-mono text-gray-800" {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+
+                // Inline code - add background and padding
+                return (
+                  <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...props}>
+                    {children}
+                  </code>
+                );
+              },
               strong: ({ node, ...props }) => <strong className="font-bold text-gray-900" {...props} />,
               em: ({ node, ...props }) => <em className="italic" {...props} />,
               a: ({ node, ...props }) => <a className="text-blue-600 hover:underline" {...props} />,

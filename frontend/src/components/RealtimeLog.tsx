@@ -8,11 +8,12 @@ interface RealtimeLogProps {
   runId: string;
   initialLogs?: LogLine[];
   isRunning: boolean;
+  onRunUpdate?: () => void; // Callback when run status changes
 }
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8081';
 
-export default function RealtimeLog({ runId, initialLogs = [], isRunning }: RealtimeLogProps) {
+export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunUpdate }: RealtimeLogProps) {
   const [logs, setLogs] = useState<LogLine[]>(initialLogs);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
@@ -52,6 +53,12 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning }: Real
                 content: data.content,
               };
               setLogs((prev) => [...prev, newLog]);
+            } else if (data.type === 'run_update') {
+              // Run status changed (completed, failed, AI analysis updated, etc.)
+              console.log('Run update received:', data);
+              if (onRunUpdate) {
+                onRunUpdate();
+              }
             }
           } catch (error) {
             console.error('Failed to parse WebSocket message:', error);

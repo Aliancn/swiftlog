@@ -1,20 +1,33 @@
 'use client';
 
-import { use } from 'react';
+import { use, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRun, useRunLogs } from '@/lib/hooks';
 import LogViewer from '@/components/LogViewer';
 import RealtimeLog from '@/components/RealtimeLog';
+import RunStatusSubscriber from '@/components/RunStatusSubscriber';
 import AIReport from '@/components/AIReport';
-import { RunStatus } from '@/types';
+import { RunStatus, AIStatus } from '@/types';
 
 export default function RunDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: run, error: runError, isLoading: runLoading, mutate: refreshRun } = useRun(id);
-  const { data: logs, error: logsError, isLoading: logsLoading } = useRunLogs(id);
+  const { data: logs, error: logsError, isLoading: logsLoading, mutate: refreshLogs } = useRunLogs(id);
+  const previousStatusRef = useRef<RunStatus | null>(null);
 
   const isLoading = runLoading || logsLoading;
   const error = runError || logsError;
+
+  // Handle run status update from WebSocket
+  const handleRunUpdate = () => {
+    console.log('Refreshing run data due to WebSocket update');
+    refreshRun();
+
+    // If run just completed, also refresh logs to get complete set
+    if (run && run.status === RunStatus.Running) {
+      refreshLogs();
+    }
+  };
 
   if (isLoading) {
     return (
@@ -130,11 +143,14 @@ export default function RunDetailsPage({ params }: { params: Promise<{ id: strin
               runId={id}
               initialLogs={logs || []}
               isRunning={isRunning}
+              onRunUpdate={handleRunUpdate}
             />
           ) : (
             <>
               <h3 className="text-lg font-medium text-gray-900 mb-2">Logs</h3>
               <LogViewer logs={logs || []} />
+              {/* Subscribe to status updates for completed runs */}
+              <RunStatusSubscriber runId={id} onRunUpdate={handleRunUpdate} />
             </>
           )}
         </div>

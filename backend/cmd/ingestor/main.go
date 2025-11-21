@@ -77,6 +77,7 @@ func main() {
 		GroupRepo:     groupRepo,
 		SettingsRepo:  settingsRepo,
 		LokiClient:    lokiClient,
+		RedisClient:   redisClient,
 		TaskQueue:     taskQueue,
 		BatchSize:     100,
 		BatchInterval: 1 * time.Second,

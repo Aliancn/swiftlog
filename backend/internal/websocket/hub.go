@@ -49,6 +49,16 @@ type LogMessage struct {
 	Content   string `json:"content"`
 }
 
+// RunUpdateMessage represents a run status update message
+type RunUpdateMessage struct {
+	Type     string  `json:"type"`
+	RunID    string  `json:"run_id"`
+	Status   *string `json:"status,omitempty"`
+	ExitCode *int32  `json:"exit_code,omitempty"`
+	AIStatus *string `json:"ai_status,omitempty"`
+	AIReport *string `json:"ai_report,omitempty"`
+}
+
 // NewHub creates a new WebSocket hub
 func NewHub(ctx context.Context, redisClient *redis.Client) *Hub {
 	return &Hub{
@@ -166,6 +176,25 @@ func PublishLog(ctx context.Context, redisClient *redis.Client, runID uuid.UUID,
 	}
 
 	data, err := json.Marshal(logMsg)
+	if err != nil {
+		return err
+	}
+
+	return redisClient.Publish(ctx, "swiftlog:logs", data).Err()
+}
+
+// PublishRunUpdate publishes a run status update to Redis
+func PublishRunUpdate(ctx context.Context, redisClient *redis.Client, runID uuid.UUID, status *string, exitCode *int32, aiStatus *string, aiReport *string) error {
+	updateMsg := RunUpdateMessage{
+		Type:     "run_update",
+		RunID:    runID.String(),
+		Status:   status,
+		ExitCode: exitCode,
+		AIStatus: aiStatus,
+		AIReport: aiReport,
+	}
+
+	data, err := json.Marshal(updateMsg)
 	if err != nil {
 		return err
 	}

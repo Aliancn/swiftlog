@@ -169,8 +169,13 @@ func (c *Client) QueryLogs(ctx context.Context, runID uuid.UUID) ([]LogEntry, er
 	// Build LogQL query
 	query := fmt.Sprintf(`{run_id="%s"}`, runID.String())
 
-	// Build query URL
-	url := fmt.Sprintf("%s/loki/api/v1/query_range?query=%s&direction=forward&limit=10000", c.baseURL, query)
+	// Set time range to last 7 days to ensure we get historical logs
+	end := time.Now()
+	start := end.Add(-7 * 24 * time.Hour)
+
+	// Build query URL with time range
+	url := fmt.Sprintf("%s/loki/api/v1/query_range?query=%s&start=%d&end=%d&direction=forward&limit=10000",
+		c.baseURL, query, start.UnixNano(), end.UnixNano())
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

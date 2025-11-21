@@ -18,14 +18,28 @@ export default function LogViewer({ logs, isLive = false }: LogViewerProps) {
     }
   }, [logs, isLive]);
 
-  const getLogColor = (level: string) => {
-    if (level.includes('STDERR') || level.includes('ERROR')) {
+  const getLogColor = (level: string, content: string) => {
+    // Only color as red if it's actually stderr
+    if (level === 'STDERR' || level.toUpperCase() === 'STDERR') {
       return 'text-red-400';
     }
-    if (level.includes('WARN')) {
+    // Check for warning indicators in content
+    if (content.toLowerCase().includes('warning') || content.toLowerCase().includes('warn')) {
       return 'text-yellow-400';
     }
-    return 'text-white';
+    return 'text-gray-300';
+  };
+
+  const formatLogContent = (content: string) => {
+    // Remove [stdout] or [stderr] prefix if present at the start
+    let cleaned = content.replace(/^\[(stdout|stderr|STDOUT|STDERR)\]\s*/, '');
+
+    // If the line is now empty or only whitespace, return a single space to preserve the line
+    if (!cleaned.trim()) {
+      return '';
+    }
+
+    return cleaned;
   };
 
   return (
@@ -63,22 +77,28 @@ export default function LogViewer({ logs, isLive = false }: LogViewerProps) {
           </div>
         ) : (
           <div className="space-y-1">
-            {logs.map((log, index) => (
-              <div
-                key={index}
-                className="flex items-start hover:bg-gray-800 px-2 py-1 rounded"
-              >
-                <span className="text-gray-500 select-none mr-4 flex-shrink-0 w-8 text-right">
-                  {index + 1}
-                </span>
-                <span className="text-gray-400 select-none mr-4 flex-shrink-0">
-                  {new Date(log.timestamp).toLocaleTimeString()}
-                </span>
-                <span className={`flex-1 whitespace-pre-wrap break-all ${getLogColor(log.level)}`}>
-                  {log.content}
-                </span>
-              </div>
-            ))}
+            {logs.map((log, index) => {
+              const formattedContent = formatLogContent(log.content);
+              // Display empty content as a single space to preserve empty lines
+              const displayContent = formattedContent || '\u00A0';
+
+              return (
+                <div
+                  key={index}
+                  className="flex items-start hover:bg-gray-800 px-2 py-1 rounded"
+                >
+                  <span className="text-gray-500 select-none mr-4 flex-shrink-0 w-8 text-right">
+                    {index + 1}
+                  </span>
+                  <span className="text-gray-400 select-none mr-4 flex-shrink-0">
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span className={`flex-1 whitespace-pre-wrap break-all ${getLogColor(log.level, formattedContent)}`}>
+                    {displayContent}
+                  </span>
+                </div>
+              );
+            })}
             <div ref={bottomRef} />
           </div>
         )}
