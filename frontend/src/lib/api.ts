@@ -178,7 +178,7 @@ class APIClient {
     ai_auto_analyze: boolean;
     ai_max_log_lines: number;
     ai_log_truncate_strategy: TruncateStrategy;
-    ai_system_prompt: string;
+    ai_prompt_language: string;
     ai_max_concurrent: number;
   }): Promise<{ settings: UserSettings; has_api_key: boolean }> {
     return this.request('/settings', {
@@ -202,7 +202,7 @@ class APIClient {
       ai_auto_analyze?: boolean | null;
       ai_max_log_lines?: number | null;
       ai_log_truncate_strategy?: TruncateStrategy | null;
-      ai_system_prompt?: string | null;
+      ai_prompt_language?: string | null;
     }
   ): Promise<{ settings: ProjectSettings; has_api_key: boolean }> {
     return this.request(`/projects/${projectId}/settings`, {

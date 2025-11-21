@@ -25,7 +25,7 @@ func (r *SettingsRepository) GetUserSettings(ctx context.Context, userID uuid.UU
 	query := `
 		SELECT id, user_id, ai_enabled, ai_base_url, ai_api_key, ai_model, ai_max_tokens,
 		       ai_auto_analyze, ai_max_log_lines, ai_log_truncate_strategy,
-		       ai_system_prompt, ai_max_concurrent, created_at, updated_at
+		       ai_prompt_language, ai_max_concurrent, created_at, updated_at
 		FROM user_settings
 		WHERE user_id = $1
 	`
@@ -40,7 +40,7 @@ func (r *SettingsRepository) GetUserSettings(ctx context.Context, userID uuid.UU
 		&settings.AIAutoAnalyze,
 		&settings.AIMaxLogLines,
 		&settings.AILogTruncateStrategy,
-		&settings.AISystemPrompt,
+		&settings.AIPromptLanguage,
 		&settings.AIMaxConcurrent,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -60,23 +60,23 @@ func (r *SettingsRepository) CreateDefaultUserSettings(ctx context.Context, user
 	query := `
 		INSERT INTO user_settings (
 			user_id, ai_enabled, ai_base_url, ai_model, ai_max_tokens,
-			ai_auto_analyze, ai_max_log_lines, ai_log_truncate_strategy, ai_system_prompt, ai_max_concurrent
+			ai_auto_analyze, ai_max_log_lines, ai_log_truncate_strategy, ai_prompt_language, ai_max_concurrent
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, user_id, ai_enabled, ai_base_url, ai_api_key, ai_model, ai_max_tokens,
 		          ai_auto_analyze, ai_max_log_lines, ai_log_truncate_strategy,
-		          ai_system_prompt, ai_max_concurrent, created_at, updated_at
+		          ai_prompt_language, ai_max_concurrent, created_at, updated_at
 	`
 	err := r.db.QueryRowContext(ctx, query,
 		userID,
-		true,                                         // ai_enabled
-		"https://api.openai.com/v1",                  // ai_base_url
-		"gpt-4o-mini",                                // ai_model
-		500,                                          // ai_max_tokens
-		false,                                        // ai_auto_analyze
-		1000,                                         // ai_max_log_lines
-		models.TruncateTail,                          // ai_log_truncate_strategy
-		"You are a helpful assistant analyzing script execution logs. Identify errors, warnings, and provide actionable recommendations.", // ai_system_prompt
-		3,                                            // ai_max_concurrent
+		true,                        // ai_enabled
+		"https://api.openai.com/v1", // ai_base_url
+		"gpt-4o-mini",               // ai_model
+		500,                         // ai_max_tokens
+		false,                       // ai_auto_analyze
+		1000,                        // ai_max_log_lines
+		models.TruncateTail,         // ai_log_truncate_strategy
+		"en",                        // ai_prompt_language (default English)
+		3,                           // ai_max_concurrent
 	).Scan(
 		&settings.ID,
 		&settings.UserID,
@@ -88,7 +88,7 @@ func (r *SettingsRepository) CreateDefaultUserSettings(ctx context.Context, user
 		&settings.AIAutoAnalyze,
 		&settings.AIMaxLogLines,
 		&settings.AILogTruncateStrategy,
-		&settings.AISystemPrompt,
+		&settings.AIPromptLanguage,
 		&settings.AIMaxConcurrent,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -105,7 +105,7 @@ func (r *SettingsRepository) UpdateUserSettings(ctx context.Context, settings *m
 		UPDATE user_settings
 		SET ai_enabled = $1, ai_base_url = $2, ai_api_key = $3, ai_model = $4,
 		    ai_max_tokens = $5, ai_auto_analyze = $6, ai_max_log_lines = $7,
-		    ai_log_truncate_strategy = $8, ai_system_prompt = $9, ai_max_concurrent = $10
+		    ai_log_truncate_strategy = $8, ai_prompt_language = $9, ai_max_concurrent = $10
 		WHERE user_id = $11
 	`
 	_, err := r.db.ExecContext(ctx, query,
@@ -117,7 +117,7 @@ func (r *SettingsRepository) UpdateUserSettings(ctx context.Context, settings *m
 		settings.AIAutoAnalyze,
 		settings.AIMaxLogLines,
 		settings.AILogTruncateStrategy,
-		settings.AISystemPrompt,
+		settings.AIPromptLanguage,
 		settings.AIMaxConcurrent,
 		settings.UserID,
 	)
@@ -133,7 +133,7 @@ func (r *SettingsRepository) GetProjectSettings(ctx context.Context, projectID u
 	query := `
 		SELECT id, project_id, ai_enabled, ai_base_url, ai_api_key, ai_model,
 		       ai_max_tokens, ai_auto_analyze, ai_max_log_lines,
-		       ai_log_truncate_strategy, ai_system_prompt, ai_max_concurrent,
+		       ai_log_truncate_strategy, ai_prompt_language, ai_max_concurrent,
 		       created_at, updated_at
 		FROM project_settings
 		WHERE project_id = $1
@@ -149,7 +149,7 @@ func (r *SettingsRepository) GetProjectSettings(ctx context.Context, projectID u
 		&settings.AIAutoAnalyze,
 		&settings.AIMaxLogLines,
 		&settings.AILogTruncateStrategy,
-		&settings.AISystemPrompt,
+		&settings.AIPromptLanguage,
 		&settings.AIMaxConcurrent,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -169,7 +169,7 @@ func (r *SettingsRepository) UpsertProjectSettings(ctx context.Context, settings
 		INSERT INTO project_settings (
 			project_id, ai_enabled, ai_base_url, ai_api_key, ai_model,
 			ai_max_tokens, ai_auto_analyze, ai_max_log_lines,
-			ai_log_truncate_strategy, ai_system_prompt
+			ai_log_truncate_strategy, ai_prompt_language
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (project_id) DO UPDATE SET
 			ai_enabled = EXCLUDED.ai_enabled,
@@ -180,7 +180,7 @@ func (r *SettingsRepository) UpsertProjectSettings(ctx context.Context, settings
 			ai_auto_analyze = EXCLUDED.ai_auto_analyze,
 			ai_max_log_lines = EXCLUDED.ai_max_log_lines,
 			ai_log_truncate_strategy = EXCLUDED.ai_log_truncate_strategy,
-			ai_system_prompt = EXCLUDED.ai_system_prompt
+			ai_prompt_language = EXCLUDED.ai_prompt_language
 		RETURNING id, created_at, updated_at
 	`
 	err := r.db.QueryRowContext(ctx, query,
@@ -193,7 +193,7 @@ func (r *SettingsRepository) UpsertProjectSettings(ctx context.Context, settings
 		settings.AIAutoAnalyze,
 		settings.AIMaxLogLines,
 		settings.AILogTruncateStrategy,
-		settings.AISystemPrompt,
+		settings.AIPromptLanguage,
 	).Scan(&settings.ID, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to upsert project settings: %w", err)
@@ -235,7 +235,7 @@ func (r *SettingsRepository) GetEffectiveSettings(ctx context.Context, projectID
 		AIAutoAnalyze:         user.AIAutoAnalyze,
 		AIMaxLogLines:         user.AIMaxLogLines,
 		AILogTruncateStrategy: user.AILogTruncateStrategy,
-		AISystemPrompt:        user.AISystemPrompt,
+		AIPromptLanguage:      user.AIPromptLanguage,
 		AIMaxConcurrent:       user.AIMaxConcurrent,
 		Source:                "user",
 	}
@@ -275,8 +275,8 @@ func (r *SettingsRepository) GetEffectiveSettings(ctx context.Context, projectID
 			effective.AILogTruncateStrategy = *project.AILogTruncateStrategy
 			hasOverrides = true
 		}
-		if project.AISystemPrompt != nil {
-			effective.AISystemPrompt = *project.AISystemPrompt
+		if project.AIPromptLanguage != nil {
+			effective.AIPromptLanguage = *project.AIPromptLanguage
 			hasOverrides = true
 		}
 		if project.AIMaxConcurrent != nil {

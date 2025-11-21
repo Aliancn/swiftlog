@@ -254,11 +254,11 @@ func (w *Worker) processRun(ctx context.Context, run *models.LogRun, userID uuid
 
 	// Create analyzer with user-specific settings
 	analyzer := ai.NewAnalyzer(&ai.Config{
-		APIKey:       effectiveSettings.AIAPIKey,
-		BaseURL:      effectiveSettings.AIBaseURL,
-		Model:        effectiveSettings.AIModel,
-		MaxTokens:    effectiveSettings.AIMaxTokens,
-		SystemPrompt: effectiveSettings.AISystemPrompt,
+		APIKey:         effectiveSettings.AIAPIKey,
+		BaseURL:        effectiveSettings.AIBaseURL,
+		Model:          effectiveSettings.AIModel,
+		MaxTokens:      effectiveSettings.AIMaxTokens,
+		PromptLanguage: effectiveSettings.AIPromptLanguage,
 	})
 
 	// Fetch logs from Loki

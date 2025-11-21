@@ -58,7 +58,7 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 		AIAutoAnalyze         bool                     `json:"ai_auto_analyze"`
 		AIMaxLogLines         int                      `json:"ai_max_log_lines" binding:"required,min=1"`
 		AILogTruncateStrategy models.TruncateStrategy `json:"ai_log_truncate_strategy" binding:"required"`
-		AISystemPrompt        string                   `json:"ai_system_prompt" binding:"required"`
+		AIPromptLanguage      string                   `json:"ai_prompt_language" binding:"required"`
 		AIMaxConcurrent       int                      `json:"ai_max_concurrent" binding:"required,min=1,max=10"`
 	}
 
@@ -84,7 +84,7 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 		AIAutoAnalyze:         req.AIAutoAnalyze,
 		AIMaxLogLines:         req.AIMaxLogLines,
 		AILogTruncateStrategy: req.AILogTruncateStrategy,
-		AISystemPrompt:        req.AISystemPrompt,
+		AIPromptLanguage:      req.AIPromptLanguage,
 		AIMaxConcurrent:       req.AIMaxConcurrent,
 	}
 
@@ -184,7 +184,7 @@ func (h *SettingsHandler) UpdateProjectSettings(c *gin.Context) {
 		AIAutoAnalyze         *bool                     `json:"ai_auto_analyze"`
 		AIMaxLogLines         *int                      `json:"ai_max_log_lines"`
 		AILogTruncateStrategy *models.TruncateStrategy `json:"ai_log_truncate_strategy"`
-		AISystemPrompt        *string                   `json:"ai_system_prompt"`
+		AIPromptLanguage      *string                   `json:"ai_prompt_language"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -201,7 +201,7 @@ func (h *SettingsHandler) UpdateProjectSettings(c *gin.Context) {
 		AIAutoAnalyze:         req.AIAutoAnalyze,
 		AIMaxLogLines:         req.AIMaxLogLines,
 		AILogTruncateStrategy: req.AILogTruncateStrategy,
-		AISystemPrompt:        req.AISystemPrompt,
+		AIPromptLanguage:      req.AIPromptLanguage,
 	}
 
 	// Handle API key

@@ -83,7 +83,7 @@ export interface UserSettings {
   ai_auto_analyze: boolean;
   ai_max_log_lines: number;
   ai_log_truncate_strategy: TruncateStrategy;
-  ai_system_prompt: string;
+  ai_prompt_language: string; // "en" or "zh"
   ai_max_concurrent: number;
   created_at: string;
   updated_at: string;
@@ -99,7 +99,7 @@ export interface ProjectSettings {
   ai_auto_analyze?: boolean;
   ai_max_log_lines?: number;
   ai_log_truncate_strategy?: TruncateStrategy;
-  ai_system_prompt?: string;
+  ai_prompt_language?: string; // "en" or "zh"
   ai_max_concurrent?: number;
   created_at: string;
   updated_at: string;
@@ -113,7 +113,7 @@ export interface EffectiveSettings {
   ai_auto_analyze: boolean;
   ai_max_log_lines: number;
   ai_log_truncate_strategy: TruncateStrategy;
-  ai_system_prompt: string;
+  ai_prompt_language: string; // "en" or "zh"
   ai_max_concurrent: number;
   source: 'user' | 'project' | 'merged';
 }

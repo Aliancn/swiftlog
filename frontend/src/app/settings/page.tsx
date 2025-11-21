@@ -23,7 +23,7 @@ export default function SettingsPage() {
     ai_auto_analyze: false,
     ai_max_log_lines: 1000,
     ai_log_truncate_strategy: TruncateStrategy.Tail,
-    ai_system_prompt: '',
+    ai_prompt_language: 'en',
     ai_max_concurrent: 3,
   });
 
@@ -42,7 +42,7 @@ export default function SettingsPage() {
         ai_auto_analyze: data.settings.ai_auto_analyze,
         ai_max_log_lines: data.settings.ai_max_log_lines,
         ai_log_truncate_strategy: data.settings.ai_log_truncate_strategy,
-        ai_system_prompt: data.settings.ai_system_prompt,
+        ai_prompt_language: data.settings.ai_prompt_language,
         ai_max_concurrent: data.settings.ai_max_concurrent,
       });
     }
@@ -269,18 +269,34 @@ export default function SettingsPage() {
             <p className="text-sm text-gray-500 mt-1">Maximum number of concurrent AI analysis tasks (1-10)</p>
           </div>
 
-          {/* System Prompt */}
+          {/* Prompt Language */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">AI System Prompt</label>
-            <textarea
-              value={formData.ai_system_prompt}
-              onChange={(e) => setFormData({ ...formData, ai_system_prompt: e.target.value })}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Instructions for the AI assistant..."
-              required
-            />
-            <p className="text-sm text-gray-500 mt-1">System instructions for AI analysis</p>
+            <label className="block text-sm font-medium text-gray-900 mb-2">AI Prompt Language</label>
+            <div className="space-y-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="ai_prompt_language"
+                  value="en"
+                  checked={formData.ai_prompt_language === 'en'}
+                  onChange={(e) => setFormData({ ...formData, ai_prompt_language: e.target.value })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">English</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="ai_prompt_language"
+                  value="zh"
+                  checked={formData.ai_prompt_language === 'zh'}
+                  onChange={(e) => setFormData({ ...formData, ai_prompt_language: e.target.value })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">中文 (Chinese)</span>
+              </label>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">Language for AI analysis prompts and reports</p>
           </div>
 
           {/* Save Button */}

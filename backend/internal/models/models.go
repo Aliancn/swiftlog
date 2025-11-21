@@ -159,7 +159,7 @@ type UserSettings struct {
 	AIAutoAnalyze         bool             `json:"ai_auto_analyze" db:"ai_auto_analyze"`
 	AIMaxLogLines         int              `json:"ai_max_log_lines" db:"ai_max_log_lines"`
 	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy" db:"ai_log_truncate_strategy"`
-	AISystemPrompt        string           `json:"ai_system_prompt" db:"ai_system_prompt"`
+	AIPromptLanguage      string           `json:"ai_prompt_language" db:"ai_prompt_language"` // "en" or "zh"
 	AIMaxConcurrent       int              `json:"ai_max_concurrent" db:"ai_max_concurrent"`
 
 	// Metadata
@@ -181,7 +181,7 @@ type ProjectSettings struct {
 	AIAutoAnalyze         *bool             `json:"ai_auto_analyze,omitempty" db:"ai_auto_analyze"`
 	AIMaxLogLines         *int              `json:"ai_max_log_lines,omitempty" db:"ai_max_log_lines"`
 	AILogTruncateStrategy *TruncateStrategy `json:"ai_log_truncate_strategy,omitempty" db:"ai_log_truncate_strategy"`
-	AISystemPrompt        *string           `json:"ai_system_prompt,omitempty" db:"ai_system_prompt"`
+	AIPromptLanguage      *string           `json:"ai_prompt_language,omitempty" db:"ai_prompt_language"` // "en" or "zh"
 	AIMaxConcurrent       *int              `json:"ai_max_concurrent,omitempty" db:"ai_max_concurrent"`
 
 	// Metadata
@@ -200,7 +200,7 @@ type EffectiveSettings struct {
 	AIAutoAnalyze         bool             `json:"ai_auto_analyze"`
 	AIMaxLogLines         int              `json:"ai_max_log_lines"`
 	AILogTruncateStrategy TruncateStrategy `json:"ai_log_truncate_strategy"`
-	AISystemPrompt        string           `json:"ai_system_prompt"`
+	AIPromptLanguage      string           `json:"ai_prompt_language"` // "en" or "zh"
 	AIMaxConcurrent       int              `json:"ai_max_concurrent"`
 
 	// Source indicator
