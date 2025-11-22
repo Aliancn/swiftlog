@@ -1,0 +1,204 @@
+name: Deploy to Server
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare deployment files
+        run: |
+          mkdir -p deploy
+          cp docker-compose.yaml deploy/
+          cp loki-config.yaml deploy/
+          cp .env.example deploy/.env
+          cp scripts/update-env.sh deploy/
+          chmod +x deploy/update-env.sh
+
+          # Create deployment script
+          cat > deploy/update.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          VERSION=$1
+          if [ -z "$VERSION" ]; then
+            VERSION="latest"
+          fi
+
+          echo "🚀 Deploying SwiftLog ${VERSION}..."
+
+          # Pull latest images
+          docker compose pull
+
+          # Restart services
+          docker compose up -d --remove-orphans
+
+          # Wait for services to be healthy
+          echo "⏳ Waiting for services to be healthy..."
+          sleep 15
+
+          # Check service status
+          docker compose ps
+
+          echo "✅ Deployment complete!"
+          echo ""
+          echo "📊 Service endpoints:"
+          echo "   Frontend:  http://$(hostname -I | awk '{print $1}'):3000"
+          echo "   API:       http://$(hostname -I | awk '{print $1}'):8080"
+          echo "   WebSocket: ws://$(hostname -I | awk '{print $1}'):8081"
+          echo "   gRPC:      $(hostname -I | awk '{print $1}'):50051"
+          EOF
+
+          chmod +x deploy/update.sh
+
+      - name: Update docker-compose to use version
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          sed -i "s|build:|#build:|g" deploy/docker-compose.yaml
+          sed -i "s|context:|#context:|g" deploy/docker-compose.yaml
+          sed -i "s|dockerfile:|#dockerfile:|g" deploy/docker-compose.yaml
+
+          # Add image references
+          sed -i "/ingestor:/a\    image: ghcr.io/${{ github.repository }}/ingestor:${VERSION}" deploy/docker-compose.yaml
+          sed -i "/api:/a\    image: ghcr.io/${{ github.repository }}/api:${VERSION}" deploy/docker-compose.yaml
+          sed -i "/websocket:/a\    image: ghcr.io/${{ github.repository }}/websocket:${VERSION}" deploy/docker-compose.yaml
+          sed -i "/ai-worker:/a\    image: ghcr.io/${{ github.repository }}/ai-worker:${VERSION}" deploy/docker-compose.yaml
+          sed -i "/frontend:/a\    image: ghcr.io/${{ github.repository }}/frontend:${VERSION}" deploy/docker-compose.yaml
+
+      - name: Create deployment package
+        run: |
+          tar czf deploy.tar.gz deploy/
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "deploy.tar.gz"
+          target: "/tmp/"
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ENVIRONMENT: ${{ secrets.ENVIRONMENT || 'production' }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: POSTGRES_PASSWORD,JWT_SECRET,ADMIN_PASSWORD,ENVIRONMENT,LOG_LEVEL
+          script: |
+            set -e
+
+            # Extract deployment package
+            cd /tmp
+            tar xzf deploy.tar.gz
+
+            # Create deployment directory if not exists
+            DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
+            sudo mkdir -p $DEPLOY_DIR
+
+            # Backup current .env if exists
+            if [ -f $DEPLOY_DIR/.env ]; then
+              sudo cp $DEPLOY_DIR/.env /tmp/.env.backup
+            fi
+
+            # Copy new files
+            sudo cp -r deploy/* $DEPLOY_DIR/
+
+            # Restore .env or create from example
+            if [ -f /tmp/.env.backup ]; then
+              sudo cp /tmp/.env.backup $DEPLOY_DIR/.env
+            else
+              sudo cp deploy/.env $DEPLOY_DIR/.env
+            fi
+
+            # Set permissions
+            sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} $DEPLOY_DIR
+
+            # Update environment variables from secrets
+            cd $DEPLOY_DIR
+            echo "🔧 Updating environment variables..."
+            export POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+            export JWT_SECRET="${JWT_SECRET}"
+            export ADMIN_PASSWORD="${ADMIN_PASSWORD}"
+            export ENVIRONMENT="${ENVIRONMENT}"
+            export LOG_LEVEL="${LOG_LEVEL}"
+            ./update-env.sh .env
+
+            # Run deployment
+            ./update.sh ${{ steps.version.outputs.version }}
+
+            # Cleanup
+            rm -rf /tmp/deploy /tmp/deploy.tar.gz /tmp/.env.backup
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
+            cd $DEPLOY_DIR
+
+            echo "📊 Service Status:"
+            docker compose ps
+
+            echo ""
+            echo "🔍 Health Check:"
+
+            # Check API health
+            if curl -f http://localhost:8080/health 2>/dev/null; then
+              echo "✅ API is healthy"
+            else
+              echo "❌ API health check failed"
+              exit 1
+            fi
+
+            echo ""
+            echo "✅ Deployment verified successfully!"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment to ${{ inputs.environment || 'production' }} succeeded!"
+          else
+            echo "❌ Deployment to ${{ inputs.environment || 'production' }} failed!"
+          fi

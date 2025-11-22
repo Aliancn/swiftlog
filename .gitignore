@@ -6,6 +6,7 @@
 *.dylib
 swiftlog
 cli/swiftlog
+dist/
 
 # Test binary
 *.test

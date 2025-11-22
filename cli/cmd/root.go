@@ -23,6 +23,12 @@ to SwiftLog for real-time log collection.`,
 	Version: version,
 }
 
+// SetVersion sets the version from main package
+func SetVersion(v string) {
+	version = v
+	rootCmd.Version = v
+}
+
 // Execute executes the root command
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {

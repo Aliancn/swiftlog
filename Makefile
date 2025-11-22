@@ -1,19 +1,30 @@
-.PHONY: help start stop restart logs build clean cli dev dev-up dev-down
+.PHONY: help start stop restart logs build clean cli cli-all release dev dev-up dev-down version
+
+# Version
+VERSION ?= $(shell cat VERSION)
 
 # Default target
 help:
 	@echo "SwiftLog - Available Commands"
 	@echo ""
+	@echo "Production:"
 	@echo "  make start        - Start all services (production mode)"
 	@echo "  make stop         - Stop all services"
 	@echo "  make restart      - Restart all services"
 	@echo "  make logs         - View logs from all services"
 	@echo "  make build        - Build all Docker images"
 	@echo "  make clean        - Stop and remove all containers, volumes"
-	@echo "  make cli          - Build CLI tool for local use"
+	@echo ""
+	@echo "CLI Tools:"
+	@echo "  make cli          - Build CLI tool for current platform"
+	@echo "  make cli-all      - Build CLI for all platforms"
+	@echo "  make release      - Create a new release (requires VERSION)"
+	@echo ""
+	@echo "Development:"
 	@echo "  make dev          - Start services in development mode"
 	@echo "  make dev-up       - Start only infrastructure (postgres, loki, redis)"
 	@echo "  make dev-down     - Stop infrastructure"
+	@echo "  make version      - Show current version"
 	@echo ""
 
 # Production deployment
@@ -70,7 +81,7 @@ clean:
 # CLI build
 cli:
 	@echo "🔨 Building SwiftLog CLI..."
-	cd cli && go build -o swiftlog -ldflags="-s -w" .
+	cd cli && go build -o swiftlog -ldflags="-s -w -X main.Version=v$(VERSION)" .
 	@echo "✅ CLI built successfully: cli/swiftlog"
 	@echo ""
 	@echo "📝 To install globally (requires sudo):"
@@ -78,6 +89,53 @@ cli:
 	@echo ""
 	@echo "📝 To configure:"
 	@echo "   ./cli/swiftlog config set --token YOUR_TOKEN --server localhost:50051"
+
+# Build CLI for all platforms
+cli-all:
+	@echo "🔨 Building SwiftLog CLI for all platforms..."
+	@mkdir -p dist
+	@echo "  → Linux amd64..."
+	@cd cli && GOOS=linux GOARCH=amd64 go build -o ../dist/swiftlog-linux-amd64 -ldflags="-s -w -X main.Version=v$(VERSION)" .
+	@echo "  → Linux arm64..."
+	@cd cli && GOOS=linux GOARCH=arm64 go build -o ../dist/swiftlog-linux-arm64 -ldflags="-s -w -X main.Version=v$(VERSION)" .
+	@echo "  → macOS amd64..."
+	@cd cli && GOOS=darwin GOARCH=amd64 go build -o ../dist/swiftlog-darwin-amd64 -ldflags="-s -w -X main.Version=v$(VERSION)" .
+	@echo "  → macOS arm64..."
+	@cd cli && GOOS=darwin GOARCH=arm64 go build -o ../dist/swiftlog-darwin-arm64 -ldflags="-s -w -X main.Version=v$(VERSION)" .
+	@echo "  → Windows amd64..."
+	@cd cli && GOOS=windows GOARCH=amd64 go build -o ../dist/swiftlog-windows-amd64.exe -ldflags="-s -w -X main.Version=v$(VERSION)" .
+	@echo ""
+	@echo "✅ All builds complete! Binaries in dist/"
+	@ls -lh dist/
+
+# Create release
+release:
+	@echo "🚀 Creating release v$(VERSION)..."
+	@echo ""
+	@echo "Checklist:"
+	@echo "  ✓ VERSION file: $(VERSION)"
+	@echo "  ✓ CHANGELOG.md updated?"
+	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo ""
+	@echo "Building CLI binaries..."
+	@make cli-all
+	@echo ""
+	@echo "Creating git tag..."
+	git tag -a v$(VERSION) -m "Release v$(VERSION)"
+	@echo ""
+	@echo "✅ Release v$(VERSION) ready!"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Review: git show v$(VERSION)"
+	@echo "  2. Push tag: git push origin v$(VERSION)"
+	@echo "  3. GitHub Actions will automatically:"
+	@echo "     - Create GitHub Release"
+	@echo "     - Build and push Docker images"
+	@echo "     - Deploy to configured servers"
+
+# Show version
+version:
+	@echo "SwiftLog v$(VERSION)"
 
 # Development mode
 dev-up:
