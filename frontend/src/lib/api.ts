@@ -219,6 +219,33 @@ class APIClient {
     return this.request(`/projects/${projectId}/settings/effective`);
   }
 
+  // Resource Management
+  async updateProject(id: string, name: string): Promise<Project> {
+    return this.request(`/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    return this.request(`/projects/${id}`, { method: 'DELETE' });
+  }
+
+  async updateGroup(id: string, name: string): Promise<LogGroup> {
+    return this.request(`/groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteGroup(id: string): Promise<void> {
+    return this.request(`/groups/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteRun(id: string): Promise<void> {
+    return this.request(`/runs/${id}`, { method: 'DELETE' });
+  }
+
   logout() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('swiftlog_token');

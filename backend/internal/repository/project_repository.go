@@ -151,3 +151,47 @@ func (r *ProjectRepository) ListAll(ctx context.Context) ([]*models.Project, err
 
 	return projects, nil
 }
+
+// Update updates a project's name
+func (r *ProjectRepository) Update(ctx context.Context, id uuid.UUID, name string) (*models.Project, error) {
+	project := &models.Project{}
+	query := `
+		UPDATE projects
+		SET name = $2
+		WHERE id = $1
+		RETURNING id, user_id, name, created_at
+	`
+	err := r.db.QueryRowContext(ctx, query, id, name).Scan(
+		&project.ID,
+		&project.UserID,
+		&project.Name,
+		&project.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("project not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to update project: %w", err)
+	}
+	return project, nil
+}
+
+// Delete deletes a project and all its related data (cascade)
+func (r *ProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM projects WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete project: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("project not found")
+	}
+
+	return nil
+}

@@ -90,6 +90,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userRepo, settingsRepo, tokenService)
 	statusHandler := handlers.NewStatusHandler(logRunRepo, taskQueue)
 	settingsHandler := handlers.NewSettingsHandler(settingsRepo, projectRepo)
+	managementHandler := handlers.NewManagementHandler(projectRepo, groupRepo, logRunRepo)
 
 	// Create Gin router
 	router := gin.Default()
@@ -158,6 +159,13 @@ func main() {
 			protected.PUT("/projects/:id/settings", settingsHandler.UpdateProjectSettings)
 			protected.DELETE("/projects/:id/settings", settingsHandler.DeleteProjectSettings)
 			protected.GET("/projects/:id/settings/effective", settingsHandler.GetEffectiveSettings)
+
+			// Resource management (requires auth)
+			protected.PUT("/projects/:id", managementHandler.UpdateProject)
+			protected.DELETE("/projects/:id", managementHandler.DeleteProject)
+			protected.PUT("/groups/:id", managementHandler.UpdateGroup)
+			protected.DELETE("/groups/:id", managementHandler.DeleteGroup)
+			protected.DELETE("/runs/:id", managementHandler.DeleteRun)
 		}
 	}
 

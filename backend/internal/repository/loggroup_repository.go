@@ -120,3 +120,47 @@ func (r *LogGroupRepository) ListByProjectID(ctx context.Context, projectID uuid
 
 	return groups, nil
 }
+
+// Update updates a log group's name
+func (r *LogGroupRepository) Update(ctx context.Context, id uuid.UUID, name string) (*models.LogGroup, error) {
+	group := &models.LogGroup{}
+	query := `
+		UPDATE log_groups
+		SET name = $2
+		WHERE id = $1
+		RETURNING id, project_id, name, created_at
+	`
+	err := r.db.QueryRowContext(ctx, query, id, name).Scan(
+		&group.ID,
+		&group.ProjectID,
+		&group.Name,
+		&group.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("log group not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to update log group: %w", err)
+	}
+	return group, nil
+}
+
+// Delete deletes a log group and all its related runs (cascade)
+func (r *LogGroupRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM log_groups WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete log group: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("log group not found")
+	}
+
+	return nil
+}

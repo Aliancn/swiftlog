@@ -2,22 +2,76 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useGroup, useGroupRuns } from '@/lib/hooks';
+import { api } from '@/lib/api';
 import { RunStatus } from '@/types';
 
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
   const { id } = use(params);
   const [limit] = useState(50);
   const [offset] = useState(0);
 
-  const { data: group, error: groupError, isLoading: groupLoading } = useGroup(id);
-  const { data: runsData, error: runsError, isLoading: runsLoading } = useGroupRuns(id, {
+  const { data: group, error: groupError, isLoading: groupLoading, mutate: mutateGroup } = useGroup(id);
+  const { data: runsData, error: runsError, isLoading: runsLoading, mutate: mutateRuns } = useGroupRuns(id, {
     limit,
     offset,
   });
 
+  const [deletingRun, setDeletingRun] = useState<{ id: string; startTime: string } | null>(null);
+  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<{ id: string; name: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const isLoading = groupLoading || runsLoading;
   const error = groupError || runsError;
+
+  const handleDeleteRun = async () => {
+    if (!deletingRun) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await api.deleteRun(deletingRun.id);
+      setDeletingRun(null);
+      mutateRuns();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete run');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!editingGroup) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await api.updateGroup(editingGroup.id, editingGroup.name);
+      setEditingGroup(null);
+      mutateGroup();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to update group');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!deletingGroup) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await api.deleteGroup(deletingGroup.id);
+      setDeletingGroup(null);
+      router.back();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete group');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -65,9 +119,29 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{group?.name}</h1>
-          <p className="mt-2 text-gray-600">Script execution runs in this group</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{group?.name}</h1>
+            <p className="mt-2 text-gray-600">Script execution runs in this group</p>
+          </div>
+          {group && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setEditingGroup({ id: group.id, name: group.name })}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-blue-600 border border-gray-300 rounded-md hover:border-blue-300"
+                title="Edit group"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setDeletingGroup({ id: group.id, name: group.name })}
+                className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 border border-red-300 rounded-md hover:border-red-400"
+                title="Delete group"
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </div>
 
         {runs.length === 0 ? (
@@ -143,7 +217,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {run.ai_status === 'completed' ? (
-                          <span className="text-green-600">✓ Available</span>
+                          <span className="text-green-600">Available</span>
                         ) : run.ai_status === 'processing' ? (
                           <span className="text-blue-600">Processing...</span>
                         ) : (
@@ -151,12 +225,20 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          href={`/runs/${run.id}`}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          View Details
-                        </Link>
+                        <div className="flex items-center justify-end space-x-3">
+                          <Link
+                            href={`/runs/${run.id}`}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            View
+                          </Link>
+                          <button
+                            onClick={() => setDeletingRun({ id: run.id, startTime: run.start_time })}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -166,6 +248,109 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </div>
         )}
       </div>
+
+      {/* Delete Run Confirmation Modal */}
+      {deletingRun && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Run</h3>
+            {actionError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+                {actionError}
+              </div>
+            )}
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete this run from <strong>{new Date(deletingRun.startTime).toLocaleString()}</strong>? This action cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end space-x-3">
+              <button
+                onClick={() => { setDeletingRun(null); setActionError(null); }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRun}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {editingGroup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Group</h3>
+            {actionError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+                {actionError}
+              </div>
+            )}
+            <input
+              type="text"
+              value={editingGroup.name}
+              onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Group name"
+            />
+            <div className="mt-4 flex justify-end space-x-3">
+              <button
+                onClick={() => { setEditingGroup(null); setActionError(null); }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateGroup}
+                disabled={actionLoading || !editingGroup.name.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Confirmation Modal */}
+      {deletingGroup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Group</h3>
+            {actionError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+                {actionError}
+              </div>
+            )}
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete <strong>{deletingGroup.name}</strong>? This will also delete all runs in this group. This action cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end space-x-3">
+              <button
+                onClick={() => { setDeletingGroup(null); setActionError(null); }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteGroup}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

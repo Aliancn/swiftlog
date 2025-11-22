@@ -280,3 +280,23 @@ func (r *LogRunRepository) ListRecentRuns(ctx context.Context, limit int) ([]*mo
 
 	return runs, nil
 }
+
+// Delete deletes a log run
+func (r *LogRunRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM log_runs WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete log run: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("log run not found")
+	}
+
+	return nil
+}
