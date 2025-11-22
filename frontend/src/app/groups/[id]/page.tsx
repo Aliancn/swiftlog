@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useGroup, useGroupRuns } from '@/lib/hooks';
+import { useGroup, useGroupRuns, useProject } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { RunStatus } from '@/types';
 
@@ -18,6 +18,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     limit,
     offset,
   });
+  const { data: project, error: projectError, isLoading: projectLoading } = useProject(group?.project_id || null);
 
   const [deletingRun, setDeletingRun] = useState<{ id: string; startTime: string } | null>(null);
   const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
@@ -25,8 +26,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const isLoading = groupLoading || runsLoading;
-  const error = groupError || runsError;
+  const isLoading = groupLoading || runsLoading || projectLoading;
+  const error = groupError || runsError || projectError;
 
   const handleDeleteRun = async () => {
     if (!deletingRun) return;
@@ -119,6 +120,55 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Breadcrumb */}
+        <nav className="flex mb-8" aria-label="Breadcrumb">
+          <ol className="flex items-center space-x-4">
+            <li>
+              <Link
+                href="/dashboard"
+                className="text-gray-400 hover:text-gray-500"
+              >
+                Projects
+              </Link>
+            </li>
+            {project && (
+              <>
+                <li>
+                  <div className="flex items-center">
+                    <svg
+                      className="flex-shrink-0 h-5 w-5 text-gray-300"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M5.555 17.776l8-16 .894.448-8 16-.894-.448z" />
+                    </svg>
+                    <Link
+                      href={`/projects/${project.id}`}
+                      className="ml-4 text-gray-400 hover:text-gray-500"
+                    >
+                      {project.name}
+                    </Link>
+                  </div>
+                </li>
+                <li>
+                  <div className="flex items-center">
+                    <svg
+                      className="flex-shrink-0 h-5 w-5 text-gray-300"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M5.555 17.776l8-16 .894.448-8 16-.894-.448z" />
+                    </svg>
+                    <span className="ml-4 text-sm font-medium text-gray-500">
+                      {group?.name}
+                    </span>
+                  </div>
+                </li>
+              </>
+            )}
+          </ol>
+        </nav>
+
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{group?.name}</h1>
