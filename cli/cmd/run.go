@@ -77,12 +77,18 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no API token configured. Run 'swiftlog config set --token YOUR_TOKEN' first")
 	}
 
-	// Set defaults
-	if projectName == "" {
-		projectName = "default"
+	// Use intelligent inference for project
+	inference, err := config.InferProject(projectName)
+	if err != nil {
+		return fmt.Errorf("failed to infer project: %w", err)
 	}
+	projectName = inference.Project
+
+	// Generate group name from command if not provided
 	if groupName == "" {
-		groupName = "default"
+		// Use the command as group name
+		commandStr := strings.Join(commandArgs, " ")
+		groupName = config.SanitizeGroupName(commandStr)
 	}
 
 	// Create gRPC client
@@ -104,7 +110,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 	defer session.Close()
 
 	fmt.Printf("📝 Streaming logs to SwiftLog (Run ID: %s)\n", session.GetRunID())
-	fmt.Printf("Project: %s, Group: %s\n", projectName, groupName)
+	fmt.Printf("Project: %s", projectName)
+	if inference.Source != "command-line flag" {
+		fmt.Printf(" (auto: %s)", inference.Source)
+	}
+	fmt.Printf(", Group: %s", groupName)
+	if groupName != "" && cmd.Flags().Lookup("group").Changed {
+		// Group provided via flag
+	} else {
+		fmt.Printf(" (from command)")
+	}
+	fmt.Println()
 	fmt.Println(strings.Repeat("-", 60))
 
 	// Execute the command
@@ -120,6 +136,12 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	// Wait for server acknowledgment
 	session.WaitForCompletion()
+
+	// Save last used project
+	if err := config.UpdateLastUsed(projectName, ""); err != nil {
+		// Don't fail the command if we can't update last used, just log a warning
+		fmt.Fprintf(os.Stderr, "Warning: failed to save last used project: %v\n", err)
+	}
 
 	// Print summary
 	fmt.Println(strings.Repeat("-", 60))

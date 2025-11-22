@@ -37,8 +37,9 @@ var configPathCmd = &cobra.Command{
 }
 
 var (
-	setToken  string
-	setServer string
+	setToken          string
+	setServer         string
+	setDefaultProject string
 )
 
 func init() {
@@ -50,6 +51,7 @@ func init() {
 	// Flags for config set
 	configSetCmd.Flags().StringVar(&setToken, "token", "", "API token")
 	configSetCmd.Flags().StringVar(&setServer, "server", "", "Server address (e.g., localhost:50051)")
+	configSetCmd.Flags().StringVar(&setDefaultProject, "default-project", "", "Default project name")
 }
 
 func runConfigSet(cmd *cobra.Command, args []string) error {
@@ -62,13 +64,25 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update values if provided
+	updated := false
 	if setToken != "" {
 		cfg.Token = setToken
 		fmt.Println("✓ Token updated")
+		updated = true
 	}
 	if setServer != "" {
 		cfg.ServerAddr = setServer
 		fmt.Println("✓ Server address updated")
+		updated = true
+	}
+	if setDefaultProject != "" {
+		cfg.DefaultProject = setDefaultProject
+		fmt.Printf("✓ Default project set to: %s\n", setDefaultProject)
+		updated = true
+	}
+
+	if !updated {
+		return fmt.Errorf("no configuration values provided. Use --token, --server, or --default-project")
 	}
 
 	// Save config
@@ -87,17 +101,39 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Current configuration:")
-	fmt.Printf("  Server Address: %s\n", cfg.ServerAddr)
+	fmt.Println()
+
+	// Connection settings
+	fmt.Println("Connection:")
+	fmt.Printf("  Server Address:   %s\n", cfg.ServerAddr)
 	if cfg.Token != "" {
 		// Mask token for security
 		maskedToken := cfg.Token
 		if len(maskedToken) > 8 {
 			maskedToken = maskedToken[:4] + "..." + maskedToken[len(maskedToken)-4:]
 		}
-		fmt.Printf("  API Token:      %s\n", maskedToken)
+		fmt.Printf("  API Token:        %s\n", maskedToken)
 	} else {
-		fmt.Println("  API Token:      (not set)")
+		fmt.Println("  API Token:        (not set)")
 	}
+
+	// Default settings
+	fmt.Println()
+	fmt.Println("Defaults:")
+	if cfg.DefaultProject != "" {
+		fmt.Printf("  Default Project:  %s\n", cfg.DefaultProject)
+	} else {
+		fmt.Println("  Default Project:  (auto-detect)")
+	}
+	fmt.Println("  Group Naming:     (from command)")
+
+	// Last used
+	if cfg.LastProject != "" {
+		fmt.Println()
+		fmt.Println("Last Used:")
+		fmt.Printf("  Project:          %s\n", cfg.LastProject)
+	}
+
 	fmt.Printf("\nConfig file: %s\n", config.GetConfigPath())
 
 	return nil

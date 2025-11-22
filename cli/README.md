@@ -104,10 +104,160 @@ The `--` separator is required to distinguish CLI flags from the command you wan
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--project` | `-p` | Project name | `default` |
-| `--group` | `-g` | Log group name | `default` |
+| `--project` | `-p` | Project name | Auto-detected (see Smart Inference) |
+| `--group` | `-g` | Log group name | Generated from command (see Group Naming) |
 | `--server` | `-s` | gRPC server address | From config |
 | `--token` | `-t` | API token | From config |
+
+### Smart Project Inference
+
+SwiftLog CLI provides intelligent automatic detection of project names when not explicitly provided. The inference follows a priority order from highest to lowest:
+
+#### Project Priority Order
+
+1. **Command-line flags** (highest priority)
+   ```bash
+   swiftlog run --project myapp -- ./build.sh
+   ```
+   Explicitly provided project name always takes precedence.
+
+2. **Project-level configuration file**
+
+   Create a `.swiftlog.json` or `.swiftlog.yaml` file in your project root:
+
+   **JSON format:**
+   ```json
+   {
+     "project": "my-project"
+   }
+   ```
+
+   **YAML format:**
+   ```yaml
+   project: my-project
+   ```
+
+3. **Global default configuration**
+   ```bash
+   swiftlog config set --default-project myapp
+   ```
+
+4. **Auto-detection from environment**
+
+   **Project inference order:**
+   - Git repository name
+   - CI/CD environment variables (GitHub Actions, GitLab CI, Jenkins, CircleCI)
+   - Current directory name
+   - Last used project
+   - Default value "default"
+
+5. **Last used tracking**
+
+   CLI automatically remembers the last used project as a fallback.
+
+### Group Naming Strategy
+
+Group names are **automatically generated from the command** being executed, making it easy to identify and organize log runs.
+
+**Default behavior (automatic):**
+```bash
+swiftlog run -- npm test
+# Group: npm-test
+
+swiftlog run -- python train_model.py --epochs 100
+# Group: python-train-model.py--epochs-100
+
+swiftlog run -- bash -c "make build && make test"
+# Group: bash--c-make-build----make-test
+```
+
+**Override with explicit group name:**
+```bash
+swiftlog run --group my-custom-group -- ./script.sh
+# Group: my-custom-group
+```
+
+**Sanitization rules:**
+- Command is limited to 100 characters
+- Spaces, slashes, and tabs are replaced with hyphens
+- Special characters are removed
+- Result is converted to lowercase
+- Leading/trailing hyphens are trimmed
+
+#### Examples
+
+**Example 1: Git Repository Auto-detection with Command-based Group**
+
+In a git repository (repo: `my-app`):
+```bash
+swiftlog run -- npm test
+```
+Automatically uses:
+- Project: `my-app` (from git repo name)
+- Group: `npm-test` (from command)
+
+**Example 2: Project Configuration File**
+
+Create `.swiftlog.json`:
+```json
+{
+  "project": "backend-api"
+}
+```
+
+Run:
+```bash
+swiftlog run -- ./deploy.sh production
+```
+Uses:
+- Project: `backend-api` (from config file)
+- Group: `deploy.sh-production` (from command)
+
+**Example 3: CI/CD Environment**
+
+In GitHub Actions (repository: `myorg/webapp`):
+```bash
+swiftlog run -- npm run build
+```
+Auto-detects:
+- Project: `webapp` (from GITHUB_REPOSITORY)
+- Group: `npm-run-build` (from command)
+
+**Example 4: Override with Explicit Names**
+
+Command-line flags override all defaults:
+```bash
+swiftlog run --project custom --group integration-test -- ./script.sh
+```
+Uses:
+- Project: `custom` (explicit)
+- Group: `integration-test` (explicit)
+
+#### Supported CI/CD Platforms
+
+SwiftLog CLI automatically recognizes these CI/CD platforms:
+
+- **GitHub Actions**: `GITHUB_REPOSITORY`, `GITHUB_REF`
+- **GitLab CI**: `CI_PROJECT_NAME`, `CI_COMMIT_BRANCH`
+- **Jenkins**: `JOB_NAME`, `GIT_BRANCH`
+- **CircleCI**: `CIRCLE_PROJECT_REPONAME`, `CIRCLE_BRANCH`
+
+#### Configuration Source Visibility
+
+When running commands, CLI shows where the configuration came from:
+
+```bash
+📝 Streaming logs to SwiftLog (Run ID: xxx)
+Project: my-app, Group: main (auto: auto-detected)
+```
+
+Possible sources:
+- (no indicator): Command-line flag
+- `(auto: project config file)`: Project configuration file
+- `(auto: default config)`: Global default configuration
+- `(auto: auto-detected)`: Environment auto-detection
+- `(auto: last used)`: Last used tracking
+- `(auto: default fallback)`: Default value
 
 ## Commands
 
@@ -132,15 +282,25 @@ Manage CLI configuration.
 **Subcommands:**
 
 ```bash
-# Set configuration
+# Set connection configuration
 swiftlog config set --token <token> --server <server>
 
-# Get current configuration
+# Set default project and group
+swiftlog config set --default-project <project>
+swiftlog config set --default-group <group>
+
+# Get current configuration (includes defaults and last used)
 swiftlog config get
 
 # Show config file path
 swiftlog config path
 ```
+
+**Available flags for `config set`:**
+- `--token`: API token for authentication
+- `--server`: gRPC server address (e.g., localhost:50051)
+- `--default-project`: Default project name (used when not auto-detected)
+- `--default-group`: Default group name (used when not auto-detected)
 
 ### version
 
