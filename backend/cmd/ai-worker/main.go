@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -11,7 +10,8 @@ import (
 	"time"
 
 	"github.com/aliancn/swiftlog/backend/internal/ai"
-	"github.com/aliancn/swiftlog/backend/internal/database"
+	"github.com/aliancn/swiftlog/backend/internal/config"
+	"github.com/aliancn/swiftlog/backend/internal/crypto"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
 	"github.com/aliancn/swiftlog/backend/internal/models"
 	"github.com/aliancn/swiftlog/backend/internal/queue"
@@ -26,13 +26,13 @@ func main() {
 	defer cancel()
 
 	// Load configuration from environment
-	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
-	lokiURL := getEnv("LOKI_URL", "http://localhost:3100")
-	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
+	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
+	lokiURL := config.GetEnv("LOKI_URL", "http://localhost:3100")
+	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
 
 	// Initialize database connection
 	log.Println("Connecting to database...")
-	db, err := initDatabase(ctx, dbURL)
+	db, err := config.InitDatabase(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -47,17 +47,28 @@ func main() {
 
 	// Initialize Redis client
 	log.Println("Connecting to Redis...")
-	redisClient, err := initRedis(ctx, redisURL)
+	redisClient, err := config.InitRedis(ctx, redisURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer redisClient.Close()
 
+	// Initialize encryption service for API key storage
+	log.Println("Initializing encryption service...")
+	encryptionKey, err := config.GetEncryptionKey("ai-worker")
+	if err != nil {
+		log.Fatalf("Failed to get encryption key: %v", err)
+	}
+	encryptionService, err := crypto.NewEncryptionService(encryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to initialize encryption service: %v", err)
+	}
+
 	// Initialize repositories
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 	groupRepo := repository.NewLogGroupRepository(db.DB)
 	projectRepo := repository.NewProjectRepository(db.DB)
-	settingsRepo := repository.NewSettingsRepository(db.DB)
+	settingsRepo := repository.NewSettingsRepository(db.DB, encryptionService)
 
 	// Initialize task queue
 	taskQueue := queue.NewQueue(redisClient)
@@ -302,44 +313,4 @@ func (w *Worker) processRun(ctx context.Context, run *models.LogRun, userID uuid
 	_ = ws.PublishRunUpdate(ctx, w.redisClient, run.ID, nil, nil, &aiStatus, &result.Report)
 
 	return nil
-}
-
-func initDatabase(ctx context.Context, dbURL string) (*database.DB, error) {
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return &database.DB{DB: db}, nil
-}
-
-func initRedis(ctx context.Context, redisURL string) (*redis.Client, error) {
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
-	}
-
-	client := redis.NewClient(opt)
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to ping Redis: %w", err)
-	}
-
-	return client, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

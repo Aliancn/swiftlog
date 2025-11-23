@@ -158,17 +158,22 @@ func (r *LogRunRepository) UpdateAIStatus(ctx context.Context, id uuid.UUID, sta
 	return nil
 }
 
-// ListPendingAIJobs retrieves runs pending AI analysis
-func (r *LogRunRepository) ListPendingAIJobs(ctx context.Context, limit int) ([]*models.LogRun, error) {
+// ListPendingAIJobs retrieves runs pending AI analysis for a specific user
+// SECURITY: Filters by user_id to prevent access to other users' jobs
+func (r *LogRunRepository) ListPendingAIJobs(ctx context.Context, userID uuid.UUID, limit int) ([]*models.LogRun, error) {
 	query := `
-		SELECT id, group_id, start_time, end_time, status, exit_code, ai_report, ai_status, created_at, updated_at
-		FROM log_runs
-		WHERE ai_status = 'pending'
-		  AND status IN ('completed', 'failed', 'aborted')
-		ORDER BY end_time DESC
-		LIMIT $1
+		SELECT lr.id, lr.group_id, lr.start_time, lr.end_time, lr.status, lr.exit_code,
+		       lr.ai_report, lr.ai_status, lr.created_at, lr.updated_at
+		FROM log_runs lr
+		JOIN log_groups lg ON lr.group_id = lg.id
+		JOIN projects p ON lg.project_id = p.id
+		WHERE lr.ai_status = 'pending'
+		  AND lr.status IN ('completed', 'failed', 'aborted')
+		  AND p.user_id = $1
+		ORDER BY lr.end_time DESC
+		LIMIT $2
 	`
-	rows, err := r.db.QueryContext(ctx, query, limit)
+	rows, err := r.db.QueryContext(ctx, query, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending AI jobs: %w", err)
 	}

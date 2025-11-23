@@ -2,6 +2,20 @@
 
 SwiftLog is a lightweight, high-performance platform for collecting, storing, and analyzing logs from script executions. Never lose track of your script runs again!
 
+---
+
+## 📚 文档导航
+
+- 📖 **[文档索引](DOCS_INDEX.md)** - 所有文档的快速导航
+- 🔒 **[安全更新](SECURITY_UPDATES.md)** - 安全修复和生产配置（部署前必读！）
+- 📚 **[API文档](API_CONSISTENCY_REPORT.md)** - 完整的API接口文档
+- 📝 **[贡献指南](CONTRIBUTING.md)** - 如何参与项目开发
+- 📝 **[变更日志](CHANGELOG.md)** - 版本历史和变更记录
+
+**⚠️ 生产部署提示**: 部署前请务必阅读 [SECURITY_UPDATES.md](SECURITY_UPDATES.md#生产环境配置清单) 配置安全相关环境变量！
+
+---
+
 ## 🌟 Features
 
 - **Zero-Intrusion Collection**: Wrap any command with `swiftlog run` or pipe output directly
@@ -60,25 +74,43 @@ cp .env.example .env
 nano .env
 ```
 
-**Required environment variables:**
+**必需环境变量（生产环境）:**
 ```bash
+# 数据库密码
 POSTGRES_PASSWORD=your-secure-password
+
+# AI API密钥（可选，如不使用AI分析可不设置）
 OPENAI_API_KEY=sk-your-openai-key-here
-JWT_SECRET=your-secure-random-secret
+
+# JWT密钥（生产环境必须设置强密钥，至少32字符）
+JWT_SECRET=$(openssl rand -base64 32)
+
+# API密钥加密密钥（生产环境必需）
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# CORS允许的域名（生产环境必须设置）
+CORS_ORIGINS=https://your-domain.com
 ```
 
-**Optional environment variables:**
+**可选环境变量:**
 ```bash
-# Use custom OpenAI-compatible API endpoint (Azure OpenAI, LocalAI, etc.)
+# JWT过期时间（推荐1-2小时）
+JWT_EXPIRATION=2h
+
+# 自定义OpenAI兼容API端点
 OPENAI_BASE_URL=https://api.openai.com/v1
 
-# Customize AI model
+# AI模型名称
 OPENAI_MODEL=gpt-4o-mini
 
-# Application environment
+# 应用环境
 ENVIRONMENT=production
 LOG_LEVEL=info
 ```
+
+**🔒 安全提示**:
+- 生产环境必须设置强`JWT_SECRET`和`ENCRYPTION_KEY`（使用`openssl rand -base64 32`生成）
+- 更多安全配置详见 [SECURITY_UPDATES.md](SECURITY_UPDATES.md#生产环境配置清单)
 
 ### 2️⃣ Start All Services (One Command!)
 
@@ -569,10 +601,107 @@ docker compose restart ai-worker
 ### AI
 - **OpenAI API**: gpt-4o-mini for log analysis
 
+## 🚢 Deployment & CI/CD
+
+SwiftLog includes production-ready deployment automation and CI/CD pipelines.
+
+### GitHub Actions Workflows
+
+- **Release**: Automatically builds CLI binaries and Docker images on version tags
+- **Deploy**: Automated deployment to production/staging servers
+
+### Quick Deployment
+
+**Using the deployment script:**
+```bash
+./deploy.sh -h your-server.com -u deploy -v v0.1.0
+```
+
+**Using GitHub Actions:**
+```bash
+# Create and push a version tag
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This will automatically:
+- Build CLI binaries for Linux, macOS (Intel/ARM), Windows
+- Create a GitHub Release with all binaries
+- Build and push Docker images to GitHub Container Registry
+- Deploy to your configured server (if secrets are set)
+
+### CLI Binary Downloads
+
+Pre-built CLI binaries are available for download from the [Releases page](https://github.com/aliancn/swiftlog/releases):
+
+- **Linux**: `swiftlog-linux-amd64`, `swiftlog-linux-arm64`
+- **macOS**: `swiftlog-darwin-amd64`, `swiftlog-darwin-arm64`
+- **Windows**: `swiftlog-windows-amd64.exe`
+
+**Installation:**
+```bash
+# Download for your platform
+wget https://github.com/aliancn/swiftlog/releases/latest/download/swiftlog-linux-amd64
+
+# Make executable and install
+chmod +x swiftlog-linux-amd64
+sudo mv swiftlog-linux-amd64 /usr/local/bin/swiftlog
+
+# Verify
+swiftlog --version
+```
+
+### Docker Images
+
+Pre-built Docker images are available on GitHub Container Registry:
+
+```bash
+ghcr.io/aliancn/swiftlog/api:v0.1.0
+ghcr.io/aliancn/swiftlog/ingestor:v0.1.0
+ghcr.io/aliancn/swiftlog/websocket:v0.1.0
+ghcr.io/aliancn/swiftlog/ai-worker:v0.1.0
+ghcr.io/aliancn/swiftlog/frontend:v0.1.0
+```
+
+See **[Deployment Guide](docs/DEPLOYMENT.md)** for detailed instructions on:
+- Production deployment strategies
+- GitHub Actions configuration
+- **Environment variable management and injection**
+- Server requirements and setup
+- SSL/TLS and reverse proxy configuration
+- Monitoring and maintenance
+- Backup and restore procedures
+
+### Environment Variables
+
+SwiftLog supports automatic environment variable injection during deployment:
+
+**Configure via GitHub Secrets:**
+```bash
+# Add to GitHub Settings → Secrets
+POSTGRES_PASSWORD    # Database password
+JWT_SECRET          # JWT signing key
+ADMIN_PASSWORD      # Admin password
+# Note: OpenAI API key must be configured manually on server
+```
+
+**Deploy with auto-configuration:**
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+# Variables automatically injected from GitHub Secrets
+```
+
+See **[Environment Variables Guide](ENV_OVERRIDE_GUIDE.md)** for complete documentation.
+
 ## 📚 Documentation
 
 Comprehensive documentation is available:
 
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment and CI/CD
+- **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Complete environment configuration guide
+- **[Environment Override Guide](ENV_OVERRIDE_GUIDE.md)** - Auto-inject variables during deployment (中文)
+- **[OpenAI Configuration](docs/OPENAI_CONFIGURATION.md)** - How to configure OpenAI API for AI features
 - **[Quick Start Guide](QUICKSTART.md)** - Get started in 5 minutes
 - **[API Documentation](docs/API.md)** - Complete REST API reference
 - **[CLI Documentation](cli/README.md)** - Command-line tool usage
@@ -581,6 +710,7 @@ Comprehensive documentation is available:
 - **[Test Suite](tests/README.md)** - Integration testing guide
 - **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
 - **[Deployment Summary](DEPLOYMENT_SUMMARY.md)** - Deployment guide (中文)
+- **[CHANGELOG](CHANGELOG.md)** - Version history and release notes
 
 ## 🤝 Contributing
 

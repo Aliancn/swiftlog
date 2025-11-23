@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -12,7 +10,8 @@ import (
 	"time"
 
 	"github.com/aliancn/swiftlog/backend/internal/auth"
-	"github.com/aliancn/swiftlog/backend/internal/database"
+	"github.com/aliancn/swiftlog/backend/internal/config"
+	"github.com/aliancn/swiftlog/backend/internal/crypto"
 	"github.com/aliancn/swiftlog/backend/internal/ingestor"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
 	"github.com/aliancn/swiftlog/backend/internal/queue"
@@ -26,14 +25,14 @@ func main() {
 	ctx := context.Background()
 
 	// Load configuration from environment
-	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
-	lokiURL := getEnv("LOKI_URL", "http://localhost:3100")
-	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
-	grpcPort := getEnv("GRPC_PORT", "50051")
+	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
+	lokiURL := config.GetEnv("LOKI_URL", "http://localhost:3100")
+	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
+	grpcPort := config.GetEnv("GRPC_PORT", "50051")
 
 	// Initialize database connection
 	log.Println("Connecting to database...")
-	db, err := initDatabase(ctx, dbURL)
+	db, err := config.InitDatabase(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -61,11 +60,22 @@ func main() {
 	// Initialize task queue
 	taskQueue := queue.NewQueue(redisClient)
 
+	// Initialize encryption service for API key storage
+	log.Println("Initializing encryption service...")
+	encryptionKey, err := config.GetEncryptionKey("ingestor")
+	if err != nil {
+		log.Fatalf("Failed to get encryption key: %v", err)
+	}
+	encryptionService, err := crypto.NewEncryptionService(encryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to initialize encryption service: %v", err)
+	}
+
 	// Initialize repositories
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 	projectRepo := repository.NewProjectRepository(db.DB)
 	groupRepo := repository.NewLogGroupRepository(db.DB)
-	settingsRepo := repository.NewSettingsRepository(db.DB)
+	settingsRepo := repository.NewSettingsRepository(db.DB, encryptionService)
 
 	// Initialize auth token service
 	tokenService := auth.NewTokenService(db.DB)
@@ -113,31 +123,4 @@ func main() {
 	log.Println("Shutting down gracefully...")
 	grpcServer.GracefulStop()
 	log.Println("Server stopped")
-}
-
-func initDatabase(ctx context.Context, dbURL string) (*database.DB, error) {
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-
-	// Verify connection
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return &database.DB{DB: db}, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/aliancn/swiftlog/backend/internal/api/handlers"
 	"github.com/aliancn/swiftlog/backend/internal/api/middleware"
 	"github.com/aliancn/swiftlog/backend/internal/auth"
-	"github.com/aliancn/swiftlog/backend/internal/database"
+	"github.com/aliancn/swiftlog/backend/internal/config"
+	"github.com/aliancn/swiftlog/backend/internal/crypto"
 	"github.com/aliancn/swiftlog/backend/internal/loki"
 	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
@@ -26,13 +27,26 @@ func main() {
 	ctx := context.Background()
 
 	// Load configuration from environment
-	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
-	lokiURL := getEnv("LOKI_URL", "http://localhost:3100")
-	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
-	apiPort := getEnv("API_PORT", "8080")
-	environment := getEnv("ENVIRONMENT", "development")
-	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-this-in-production")
-	jwtExpiration := getEnvDuration("JWT_EXPIRATION", 24*time.Hour)
+	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
+	lokiURL := config.GetEnv("LOKI_URL", "http://localhost:3100")
+	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
+	apiPort := config.GetEnv("API_PORT", "8080")
+	environment := config.GetEnv("ENVIRONMENT", "development")
+	corsOrigins := config.GetEnv("CORS_ORIGINS", "http://localhost:3000")
+	jwtSecret := config.GetEnv("JWT_SECRET", "your-secret-key-change-this-in-production")
+	// Default: 2 hours (more secure than 24h, balances security and UX)
+	// Production recommendation: 15m-1h with refresh token mechanism
+	jwtExpiration := config.GetEnvDuration("JWT_EXPIRATION", 2*time.Hour)
+
+	if environment == "production" && jwtExpiration > 24*time.Hour {
+		log.Printf("WARNING: JWT_EXPIRATION is set to %v (>24h) in production", jwtExpiration)
+		log.Println("WARNING: Long-lived JWTs increase security risk. Consider using shorter expiration with refresh tokens.")
+	}
+
+	// Validate JWT secret strength
+	if err := validateJWTSecret(jwtSecret, environment); err != nil {
+		log.Fatalf("JWT secret validation failed: %v", err)
+	}
 
 	// Set Gin mode
 	if environment == "production" {
@@ -41,7 +55,7 @@ func main() {
 
 	// Initialize database connection
 	log.Println("Connecting to database...")
-	db, err := initDatabase(ctx, dbURL)
+	db, err := config.InitDatabase(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -69,12 +83,23 @@ func main() {
 	// Initialize task queue
 	taskQueue := queue.NewQueue(redisClient)
 
+	// Initialize encryption service for API key storage
+	log.Println("Initializing encryption service...")
+	encryptionKey, err := config.GetEncryptionKey("api")
+	if err != nil {
+		log.Fatalf("Failed to get encryption key: %v", err)
+	}
+	encryptionService, err := crypto.NewEncryptionService(encryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to initialize encryption service: %v", err)
+	}
+
 	// Initialize repositories
 	projectRepo := repository.NewProjectRepository(db.DB)
 	groupRepo := repository.NewLogGroupRepository(db.DB)
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 	userRepo := repository.NewUserRepository(db.DB)
-	settingsRepo := repository.NewSettingsRepository(db.DB)
+	settingsRepo := repository.NewSettingsRepository(db.DB, encryptionService)
 	systemConfigRepo := repository.NewSystemConfigRepository(db.DB)
 
 	// Initialize auth services
@@ -83,7 +108,7 @@ func main() {
 
 	// Initialize admin user
 	log.Println("Initializing admin user...")
-	if err := initializeAdmin(ctx, userRepo, settingsRepo, getEnv("ADMIN_USERNAME", "admin"), getEnv("ADMIN_PASSWORD", "admin123")); err != nil {
+	if err := initializeAdmin(ctx, userRepo, settingsRepo, config.GetEnv("ADMIN_USERNAME", "admin"), config.GetEnv("ADMIN_PASSWORD", "admin123")); err != nil {
 		log.Printf("Warning: Failed to initialize admin user: %v", err)
 	}
 
@@ -100,12 +125,19 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
+	// Parse CORS origins from environment
+	allowedOrigins := strings.Split(corsOrigins, ",")
+	for i := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+	}
+	log.Printf("CORS allowed origins: %v", allowedOrigins)
+
 	// CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
@@ -118,8 +150,9 @@ func main() {
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
-		// Auth endpoints (no auth required)
+		// Auth endpoints (no auth required, but rate limited)
 		auth := v1.Group("/auth")
+		auth.Use(middleware.AuthRateLimitMiddleware(redisClient))
 		{
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/register", authHandler.Register)
@@ -215,45 +248,6 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func initDatabase(ctx context.Context, dbURL string) (*database.DB, error) {
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-
-	// Verify connection
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return &database.DB{DB: db}, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			log.Printf("Warning: Invalid duration for %s, using default: %v", key, defaultValue)
-			return defaultValue
-		}
-		return duration
-	}
-	return defaultValue
-}
-
 // initializeAdmin creates the admin user if no users exist
 func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, settingsRepo *repository.SettingsRepository, username, password string) error {
 	// Check if any users exist
@@ -287,5 +281,54 @@ func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, s
 	}
 
 	log.Printf("Admin user created: %s (ID: %s)", admin.Username, admin.ID)
+	return nil
+}
+
+// validateJWTSecret validates JWT secret strength
+func validateJWTSecret(secret, environment string) error {
+	// List of common weak secrets
+	weakSecrets := []string{
+		"your-secret-key-change-this-in-production",
+		"secret",
+		"changeme",
+		"password",
+		"123456",
+		"admin",
+		"test",
+		"default",
+	}
+
+	// In production, enforce strict validation
+	if environment == "production" {
+		// Check against weak secret list
+		for _, weak := range weakSecrets {
+			if secret == weak {
+				return fmt.Errorf("SECURITY: JWT_SECRET is set to a default/weak value in production. Please set a strong random secret")
+			}
+		}
+
+		// Enforce minimum length (256 bits = 32 bytes)
+		if len(secret) < 32 {
+			return fmt.Errorf("SECURITY: JWT_SECRET must be at least 32 characters in production, got %d. Generate with: openssl rand -base64 32", len(secret))
+		}
+
+		log.Println("JWT secret validated successfully for production environment")
+		return nil
+	}
+
+	// In development, warn about weak secrets
+	for _, weak := range weakSecrets {
+		if secret == weak {
+			log.Printf("WARNING: JWT_SECRET is set to a default value (%s)", secret)
+			log.Println("WARNING: This is acceptable in development but MUST be changed in production")
+			log.Printf("WARNING: Generate a strong secret with: openssl rand -base64 32")
+			return nil
+		}
+	}
+
+	if len(secret) < 32 {
+		log.Printf("WARNING: JWT_SECRET is shorter than recommended (got %d chars, recommend 32+)", len(secret))
+	}
+
 	return nil
 }

@@ -41,7 +41,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
 Ensure you have the following installed:
 
 - **Go** 1.21+ (for backend and CLI)
-- **Node.js** 20+ (for frontend)
+- **Node.js** 22+ (for frontend)
 - **Docker** 24+ & **Docker Compose** v2+
 - **Git**
 - **PostgreSQL** client tools (optional, for debugging)

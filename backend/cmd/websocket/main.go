@@ -2,53 +2,85 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/aliancn/swiftlog/backend/internal/auth"
-	"github.com/aliancn/swiftlog/backend/internal/database"
+	"github.com/aliancn/swiftlog/backend/internal/config"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
 	ws "github.com/aliancn/swiftlog/backend/internal/websocket"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/redis/go-redis/v9"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins in development (should be restricted in production)
-		return true
-	},
-}
+var (
+	upgrader         websocket.Upgrader
+	allowedOrigins   []string
+	isProduction     bool
+)
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Load configuration from environment
-	dbURL := getEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
-	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
-	wsPort := getEnv("WS_PORT", "8081")
-	environment := getEnv("ENVIRONMENT", "development")
+	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
+	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
+	wsPort := config.GetEnv("WS_PORT", "8081")
+	environment := config.GetEnv("ENVIRONMENT", "development")
+	allowedOriginsStr := config.GetEnv("ALLOWED_ORIGINS", "http://localhost:3000")
+
+	// Parse allowed origins
+	allowedOrigins = strings.Split(allowedOriginsStr, ",")
+	for i := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+	}
+	isProduction = environment == "production"
+
+	// Initialize WebSocket upgrader with secure origin checking
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+
+			// In development, allow all origins
+			if !isProduction {
+				log.Printf("DEV: Accepting WebSocket connection from origin: %s", origin)
+				return true
+			}
+
+			// In production, check against allowed origins
+			for _, allowed := range allowedOrigins {
+				if origin == allowed {
+					log.Printf("PROD: Accepting WebSocket connection from allowed origin: %s", origin)
+					return true
+				}
+			}
+
+			log.Printf("PROD: Rejecting WebSocket connection from unauthorized origin: %s", origin)
+			return false
+		},
+	}
 
 	// Set Gin mode
-	if environment == "production" {
+	if isProduction {
 		gin.SetMode(gin.ReleaseMode)
+		log.Printf("Running in PRODUCTION mode with allowed origins: %v", allowedOrigins)
+	} else {
+		log.Printf("Running in DEVELOPMENT mode - accepting all WebSocket origins")
 	}
 
 	// Initialize database connection
 	log.Println("Connecting to database...")
-	db, err := initDatabase(ctx, dbURL)
+	db, err := config.InitDatabase(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -56,7 +88,7 @@ func main() {
 
 	// Initialize Redis client
 	log.Println("Connecting to Redis...")
-	redisClient, err := initRedis(ctx, redisURL)
+	redisClient, err := config.InitRedis(ctx, redisURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
@@ -174,44 +206,4 @@ func handleWebSocket(
 	client := ws.NewClient(hub, conn, runID)
 	client.Register()
 	client.Start()
-}
-
-func initDatabase(ctx context.Context, dbURL string) (*database.DB, error) {
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return &database.DB{DB: db}, nil
-}
-
-func initRedis(ctx context.Context, redisURL string) (*redis.Client, error) {
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
-	}
-
-	client := redis.NewClient(opt)
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to ping Redis: %w", err)
-	}
-
-	return client, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

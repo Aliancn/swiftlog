@@ -37,6 +37,7 @@ func NewAuthHandler(
 
 // Login authenticates a user and returns a session token
 // POST /api/v1/auth/login
+// SECURITY: Uses constant-time comparison to prevent account enumeration through timing attacks
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
@@ -48,15 +49,31 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Dummy hash for timing attack protection (bcrypt cost 12)
+	// This ensures password verification takes the same time whether user exists or not
+	const dummyHash = "$2a$12$AAAAAAAAAAAAAAAAAAAAAO8cGNt4Kt0XRKvzHR7L.I8nqFqvONxJ6"
+
 	// Get user from database
 	user, err := h.userRepo.GetByUsername(c.Request.Context(), req.Username)
+
+	// Always perform password verification to prevent timing attacks
+	var passwordHash string
 	if err != nil {
+		// User not found - use dummy hash to normalize timing
+		passwordHash = dummyHash
+	} else {
+		passwordHash = user.PasswordHash
+	}
+
+	// Verify password (always called, regardless of user existence)
+	if err := auth.VerifyPassword(req.Password, passwordHash); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
-	// Verify password
-	if err := auth.VerifyPassword(req.Password, user.PasswordHash); err != nil {
+	// If user was not found, return the same error
+	// This branch is only reached if dummy hash verification succeeded (never happens with correct dummy hash)
+	if user == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}

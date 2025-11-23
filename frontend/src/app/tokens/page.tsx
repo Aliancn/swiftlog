@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 interface Token {
   id: string;
@@ -14,10 +14,10 @@ export default function TokensPage() {
   const router = useRouter();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [newTokenName, setNewTokenName] = useState('');
+  const [error, setError] = useState("");
+  const [newTokenName, setNewTokenName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [newTokenValue, setNewTokenValue] = useState('');
+  const [newTokenValue, setNewTokenValue] = useState("");
 
   useEffect(() => {
     loadTokens();
@@ -28,10 +28,10 @@ export default function TokensPage() {
       const response = await api.listTokens();
       setTokens(response.tokens || []);
     } catch (err) {
-      if (err instanceof Error && err.message.includes('401')) {
-        router.push('/login');
+      if (err instanceof Error && err.message.includes("401")) {
+        router.push("/login");
       } else {
-        setError('Failed to load tokens');
+        setError("Failed to load tokens");
       }
     } finally {
       setIsLoading(false);
@@ -41,15 +41,15 @@ export default function TokensPage() {
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCreating(true);
-    setError('');
+    setError("");
 
     try {
       const response = await api.createToken(newTokenName);
       setNewTokenValue(response.token);
-      setNewTokenName('');
+      setNewTokenName("");
       await loadTokens();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create token');
+      setError(err instanceof Error ? err.message : "Failed to create token");
     } finally {
       setIsCreating(false);
     }
@@ -63,9 +63,9 @@ export default function TokensPage() {
     try {
       await api.deleteToken(id);
       await loadTokens();
-      setError(''); // Clear any previous errors
+      setError(""); // Clear any previous errors
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete token');
+      setError(err instanceof Error ? err.message : "Failed to delete token");
     }
   };
 
@@ -93,12 +93,11 @@ export default function TokensPage() {
             Create and manage API tokens for CLI tools to upload logs
           </p>
           <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
-            <p className="text-sm text-blue-900 font-medium mb-2">
-              What are API Tokens?
-            </p>
+            <p className="text-sm text-blue-900 font-medium mb-2">What are API Tokens?</p>
             <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-              <li>API tokens are used by CLI tools (swiftlog CLI) to authenticate when uploading logs</li>
-              <li>Web login uses JWT sessions, not API tokens</li>
+              <li>
+                API tokens are used by CLI tools (swiftlog CLI) to authenticate when uploading logs
+              </li>
               <li>You can create multiple tokens for different machines or purposes</li>
               <li>Tokens never expire unless manually deleted</li>
             </ul>
@@ -113,9 +112,7 @@ export default function TokensPage() {
 
         {newTokenValue && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
-            <h3 className="text-sm font-medium text-green-900 mb-2">
-              Token created successfully!
-            </h3>
+            <h3 className="text-sm font-medium text-green-900 mb-2">Token created successfully!</h3>
             <p className="text-xs text-green-700 mb-2">
               Make sure to copy your token now. You won't be able to see it again!
             </p>
@@ -130,7 +127,7 @@ export default function TokensPage() {
                 Copy
               </button>
               <button
-                onClick={() => setNewTokenValue('')}
+                onClick={() => setNewTokenValue("")}
                 className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
               >
                 Close
@@ -155,7 +152,7 @@ export default function TokensPage() {
               disabled={isCreating}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              {isCreating ? 'Creating...' : 'Create Token'}
+              {isCreating ? "Creating..." : "Create Token"}
             </button>
           </form>
         </div>

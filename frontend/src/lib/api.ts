@@ -88,10 +88,6 @@ class APIClient {
     return this.request<LogLine[]>(`/runs/${id}/logs`);
   }
 
-  async getAIReport(id: string): Promise<{ report: string; status: string }> {
-    return this.request(`/runs/${id}/ai-report`);
-  }
-
   async triggerAIAnalysis(id: string): Promise<void> {
     return this.request(`/runs/${id}/analyze`, { method: 'POST' });
   }
@@ -138,10 +134,6 @@ class APIClient {
 
   async deleteToken(id: string): Promise<void> {
     return this.request(`/auth/tokens/${id}`, { method: 'DELETE' });
-  }
-
-  async listUsers(): Promise<{ users: any[] }> {
-    return this.request('/auth/users');
   }
 
   // Admin - User Management

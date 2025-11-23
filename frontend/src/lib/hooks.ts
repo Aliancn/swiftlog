@@ -133,15 +133,6 @@ export function useRunLogs(id: string | null): UseDataResult<LogLine[]> {
   );
 }
 
-export function useAIReport(id: string | null): UseDataResult<{ report: string; status: string }> {
-  return useData<{ report: string; status: string }>(
-    id ? `run-${id}-ai-report` : null,
-    function fetchAIReport() {
-      return api.getAIReport(id!);
-    }
-  );
-}
-
 export function useStatistics(): UseDataResult<{
   run_statistics: {
     running: number;

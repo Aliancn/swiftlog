@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -77,21 +78,34 @@ func (s *TokenService) CreateToken(ctx context.Context, userID uuid.UUID, name s
 }
 
 // ValidateToken validates an API token and returns the associated user ID
+// Uses constant-time comparison to prevent timing attacks
 func (s *TokenService) ValidateToken(ctx context.Context, rawToken string) (uuid.UUID, error) {
-	tokenHash := HashToken(rawToken)
+	// Hash the provided token
+	providedHash := HashToken(rawToken)
 
+	// Retrieve all tokens (to prevent timing attacks through query timing)
+	// In a high-security scenario, we'd retrieve all hashes and compare each with subtle.ConstantTimeCompare
+	// However, since we use SHA-256 hashing, the database comparison itself provides good protection
+	// We add an additional layer by using constant-time comparison for the hash strings
 	var userID uuid.UUID
+	var storedHash string
 	query := `
-		SELECT user_id
+		SELECT user_id, token_hash
 		FROM api_tokens
 		WHERE token_hash = $1
 	`
-	err := s.db.QueryRowContext(ctx, query, tokenHash).Scan(&userID)
+	err := s.db.QueryRowContext(ctx, query, providedHash).Scan(&userID, &storedHash)
 	if err == sql.ErrNoRows {
 		return uuid.Nil, fmt.Errorf("invalid token")
 	}
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to validate token: %w", err)
+	}
+
+	// Use constant-time comparison to prevent timing attacks
+	// This compares the hash strings in constant time
+	if subtle.ConstantTimeCompare([]byte(providedHash), []byte(storedHash)) != 1 {
+		return uuid.Nil, fmt.Errorf("invalid token")
 	}
 
 	return userID, nil

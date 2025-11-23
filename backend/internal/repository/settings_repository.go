@@ -4,24 +4,32 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
+	"github.com/aliancn/swiftlog/backend/internal/crypto"
 	"github.com/aliancn/swiftlog/backend/internal/models"
 	"github.com/google/uuid"
 )
 
 // SettingsRepository handles database operations for settings
 type SettingsRepository struct {
-	db *sql.DB
+	db               *sql.DB
+	encryptionService *crypto.EncryptionService
 }
 
 // NewSettingsRepository creates a new settings repository
-func NewSettingsRepository(db *sql.DB) *SettingsRepository {
-	return &SettingsRepository{db: db}
+func NewSettingsRepository(db *sql.DB, encryptionService *crypto.EncryptionService) *SettingsRepository {
+	return &SettingsRepository{
+		db:               db,
+		encryptionService: encryptionService,
+	}
 }
 
 // GetUserSettings retrieves user-specific settings
 func (r *SettingsRepository) GetUserSettings(ctx context.Context, userID uuid.UUID) (*models.UserSettings, error) {
 	settings := &models.UserSettings{}
+	var encryptedKey sql.NullString
+
 	query := `
 		SELECT id, user_id, ai_enabled, ai_base_url, ai_api_key, ai_model, ai_max_tokens,
 		       ai_auto_analyze, ai_max_log_lines, ai_log_truncate_strategy,
@@ -34,7 +42,7 @@ func (r *SettingsRepository) GetUserSettings(ctx context.Context, userID uuid.UU
 		&settings.UserID,
 		&settings.AIEnabled,
 		&settings.AIBaseURL,
-		&settings.AIAPIKey,
+		&encryptedKey,
 		&settings.AIModel,
 		&settings.AIMaxTokens,
 		&settings.AIAutoAnalyze,
@@ -51,6 +59,21 @@ func (r *SettingsRepository) GetUserSettings(ctx context.Context, userID uuid.UU
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
+
+	// Decrypt API key if present
+	if encryptedKey.Valid && encryptedKey.String != "" {
+		decrypted, err := r.encryptionService.Decrypt(encryptedKey.String)
+		if err != nil {
+			log.Printf("Warning: failed to decrypt user API key for user %s: %v", userID, err)
+			// Keep encrypted value in case of decryption error (backward compatibility)
+			settings.AIAPIKey = encryptedKey
+		} else {
+			settings.AIAPIKey = sql.NullString{String: decrypted, Valid: true}
+		}
+	} else {
+		settings.AIAPIKey = encryptedKey
+	}
+
 	return settings, nil
 }
 
@@ -101,6 +124,18 @@ func (r *SettingsRepository) CreateDefaultUserSettings(ctx context.Context, user
 
 // UpdateUserSettings updates user-specific settings
 func (r *SettingsRepository) UpdateUserSettings(ctx context.Context, settings *models.UserSettings) error {
+	// Encrypt API key before storing
+	var encryptedKey sql.NullString
+	if settings.AIAPIKey.Valid && settings.AIAPIKey.String != "" {
+		encrypted, err := r.encryptionService.Encrypt(settings.AIAPIKey.String)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt API key: %w", err)
+		}
+		encryptedKey = sql.NullString{String: encrypted, Valid: true}
+	} else {
+		encryptedKey = sql.NullString{Valid: false}
+	}
+
 	query := `
 		UPDATE user_settings
 		SET ai_enabled = $1, ai_base_url = $2, ai_api_key = $3, ai_model = $4,
@@ -111,7 +146,7 @@ func (r *SettingsRepository) UpdateUserSettings(ctx context.Context, settings *m
 	_, err := r.db.ExecContext(ctx, query,
 		settings.AIEnabled,
 		settings.AIBaseURL,
-		settings.AIAPIKey,
+		encryptedKey,
 		settings.AIModel,
 		settings.AIMaxTokens,
 		settings.AIAutoAnalyze,
@@ -128,8 +163,12 @@ func (r *SettingsRepository) UpdateUserSettings(ctx context.Context, settings *m
 }
 
 // GetProjectSettings retrieves project-specific settings
+// Note: This method doesn't verify project ownership for flexibility, but should only be called
+// after authorization checks. For methods that verify ownership, see GetEffectiveSettings.
 func (r *SettingsRepository) GetProjectSettings(ctx context.Context, projectID uuid.UUID) (*models.ProjectSettings, error) {
 	settings := &models.ProjectSettings{}
+	var encryptedKey sql.NullString
+
 	query := `
 		SELECT id, project_id, ai_enabled, ai_base_url, ai_api_key, ai_model,
 		       ai_max_tokens, ai_auto_analyze, ai_max_log_lines,
@@ -143,7 +182,7 @@ func (r *SettingsRepository) GetProjectSettings(ctx context.Context, projectID u
 		&settings.ProjectID,
 		&settings.AIEnabled,
 		&settings.AIBaseURL,
-		&settings.AIAPIKey,
+		&encryptedKey,
 		&settings.AIModel,
 		&settings.AIMaxTokens,
 		&settings.AIAutoAnalyze,
@@ -160,11 +199,38 @@ func (r *SettingsRepository) GetProjectSettings(ctx context.Context, projectID u
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project settings: %w", err)
 	}
+
+	// Decrypt API key if present
+	if encryptedKey.Valid && encryptedKey.String != "" {
+		decrypted, err := r.encryptionService.Decrypt(encryptedKey.String)
+		if err != nil {
+			log.Printf("Warning: failed to decrypt project API key for project %s: %v", projectID, err)
+			// Keep encrypted value in case of decryption error (backward compatibility)
+			settings.AIAPIKey = encryptedKey
+		} else {
+			settings.AIAPIKey = sql.NullString{String: decrypted, Valid: true}
+		}
+	} else {
+		settings.AIAPIKey = encryptedKey
+	}
+
 	return settings, nil
 }
 
 // UpsertProjectSettings creates or updates project-specific settings
 func (r *SettingsRepository) UpsertProjectSettings(ctx context.Context, settings *models.ProjectSettings) error {
+	// Encrypt API key before storing
+	var encryptedKey sql.NullString
+	if settings.AIAPIKey.Valid && settings.AIAPIKey.String != "" {
+		encrypted, err := r.encryptionService.Encrypt(settings.AIAPIKey.String)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt API key: %w", err)
+		}
+		encryptedKey = sql.NullString{String: encrypted, Valid: true}
+	} else {
+		encryptedKey = settings.AIAPIKey
+	}
+
 	query := `
 		INSERT INTO project_settings (
 			project_id, ai_enabled, ai_base_url, ai_api_key, ai_model,
@@ -187,7 +253,7 @@ func (r *SettingsRepository) UpsertProjectSettings(ctx context.Context, settings
 		settings.ProjectID,
 		settings.AIEnabled,
 		settings.AIBaseURL,
-		settings.AIAPIKey,
+		encryptedKey,
 		settings.AIModel,
 		settings.AIMaxTokens,
 		settings.AIAutoAnalyze,
@@ -213,6 +279,20 @@ func (r *SettingsRepository) DeleteProjectSettings(ctx context.Context, projectI
 
 // GetEffectiveSettings retrieves the effective settings for a project (merged user + project)
 func (r *SettingsRepository) GetEffectiveSettings(ctx context.Context, projectID, userID uuid.UUID) (*models.EffectiveSettings, error) {
+	// SECURITY: Verify that the project belongs to the user (defense in depth)
+	var projectUserID uuid.UUID
+	verifyQuery := `SELECT user_id FROM projects WHERE id = $1`
+	err := r.db.QueryRowContext(ctx, verifyQuery, projectID).Scan(&projectUserID)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("project not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify project ownership: %w", err)
+	}
+	if projectUserID != userID {
+		return nil, fmt.Errorf("access denied: project does not belong to user")
+	}
+
 	// Get user settings
 	user, err := r.GetUserSettings(ctx, userID)
 	if err != nil {
