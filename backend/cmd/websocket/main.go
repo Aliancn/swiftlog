@@ -20,6 +20,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	// Maximum size for authentication messages (8KB)
+	// Auth messages contain JWT tokens which are typically < 2KB
+	maxAuthMessageSize = 8 * 1024
+)
+
 var (
 	upgrader         websocket.Upgrader
 	allowedOrigins   []string
@@ -46,8 +52,8 @@ func main() {
 
 	// Initialize WebSocket upgrader with secure origin checking
 	upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		ReadBufferSize:  4096, // 4KB buffer for incoming messages
+		WriteBufferSize: 4096, // 4KB buffer for outgoing messages
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
 
@@ -155,20 +161,6 @@ func handleWebSocket(
 	groupRepo *repository.LogGroupRepository,
 	projectRepo *repository.ProjectRepository,
 ) {
-	// Extract token from query parameter
-	token := c.Query("token")
-	if token == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-		return
-	}
-
-	// Validate token
-	userID, err := tokenService.ValidateToken(c.Request.Context(), token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-		return
-	}
-
 	// Parse run ID
 	runID, err := uuid.Parse(c.Param("run_id"))
 	if err != nil {
@@ -176,31 +168,78 @@ func handleWebSocket(
 		return
 	}
 
-	// Verify user has access to this run
-	run, err := logRunRepo.GetByID(c.Request.Context(), runID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
-		return
-	}
-
-	group, err := groupRepo.GetByID(c.Request.Context(), run.GroupID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify ownership"})
-		return
-	}
-
-	project, err := projectRepo.GetByID(c.Request.Context(), group.ProjectID)
-	if err != nil || project.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-		return
-	}
-
-	// Upgrade to WebSocket
+	// Upgrade to WebSocket first
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade connection: %v", err)
 		return
 	}
+
+	// Set read deadline for authentication
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+	// Set message size limit for authentication message
+	// This prevents DoS attacks via oversized auth messages
+	conn.SetReadLimit(maxAuthMessageSize)
+
+	// Wait for authentication message
+	var authMsg struct {
+		Type  string `json:"type"`
+		Token string `json:"token"`
+	}
+
+	err = conn.ReadJSON(&authMsg)
+	if err != nil {
+		log.Printf("Failed to read auth message: %v", err)
+		conn.WriteJSON(map[string]string{"error": "Authentication required"})
+		conn.Close()
+		return
+	}
+
+	// Clear read deadline after auth
+	conn.SetReadDeadline(time.Time{})
+
+	// Verify message type
+	if authMsg.Type != "auth" {
+		log.Printf("Invalid message type: %s", authMsg.Type)
+		conn.WriteJSON(map[string]string{"error": "Authentication required"})
+		conn.Close()
+		return
+	}
+
+	// Validate token
+	userID, err := tokenService.ValidateToken(c.Request.Context(), authMsg.Token)
+	if err != nil {
+		log.Printf("Token validation failed: %v", err)
+		conn.WriteJSON(map[string]string{"error": "Invalid token"})
+		conn.Close()
+		return
+	}
+
+	// Verify user has access to this run
+	run, err := logRunRepo.GetByID(c.Request.Context(), runID)
+	if err != nil {
+		conn.WriteJSON(map[string]string{"error": "Run not found"})
+		conn.Close()
+		return
+	}
+
+	group, err := groupRepo.GetByID(c.Request.Context(), run.GroupID)
+	if err != nil {
+		conn.WriteJSON(map[string]string{"error": "Failed to verify ownership"})
+		conn.Close()
+		return
+	}
+
+	project, err := projectRepo.GetByID(c.Request.Context(), group.ProjectID)
+	if err != nil || project.UserID != userID {
+		conn.WriteJSON(map[string]string{"error": "Access denied"})
+		conn.Close()
+		return
+	}
+
+	// Send auth success message
+	conn.WriteJSON(map[string]string{"type": "auth_success", "message": "Authenticated successfully"})
 
 	// Create client and register with hub
 	client := ws.NewClient(hub, conn, runID)

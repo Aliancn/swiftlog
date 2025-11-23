@@ -161,13 +161,13 @@ export function useRecentRuns(limit?: number): UseDataResult<PaginatedResponse<L
   });
 }
 
-export function useUserSettings(): UseDataResult<{ settings: UserSettings; has_api_key: boolean }> {
+export function useUserSettings(): UseDataResult<{ settings: UserSettings; has_api_key: boolean; api_key_last4?: string }> {
   return useData('global-settings', function fetchUserSettings() {
     return api.getUserSettings();
   });
 }
 
-export function useProjectSettings(projectId: string | null): UseDataResult<{ settings: ProjectSettings | null; has_api_key: boolean }> {
+export function useProjectSettings(projectId: string | null): UseDataResult<{ settings: ProjectSettings | null; has_api_key: boolean; api_key_last4?: string }> {
   return useData(
     projectId ? `project-settings-${projectId}` : null,
     function fetchProjectSettings() {

@@ -21,6 +21,12 @@ type RunsHandler struct {
 	taskQueue   *queue.Queue
 }
 
+const (
+	// MaxOffset is the maximum allowed pagination offset to prevent DoS attacks
+	// Large offsets can cause database performance degradation
+	MaxOffset = 10000
+)
+
 // NewRunsHandler creates a new runs handler
 func NewRunsHandler(
 	logRunRepo *repository.LogRunRepository,
@@ -71,6 +77,13 @@ func (h *RunsHandler) ListRuns(c *gin.Context) {
 	}
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			// Security: Limit maximum offset to prevent DoS attacks
+			if o > MaxOffset {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "Offset too large (max 10000)",
+				})
+				return
+			}
 			offset = o
 		}
 	}

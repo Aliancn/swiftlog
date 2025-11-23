@@ -107,6 +107,17 @@ func (r *UserRepository) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// CountAdmins returns the number of active admin users
+func (r *UserRepository) CountAdmins(ctx context.Context) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM users WHERE is_admin = true AND is_active = true`
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count admins: %w", err)
+	}
+	return count, nil
+}
+
 // ListAll retrieves all users
 func (r *UserRepository) ListAll(ctx context.Context) ([]*models.User, error) {
 	query := `

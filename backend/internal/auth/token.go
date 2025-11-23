@@ -108,6 +108,18 @@ func (s *TokenService) ValidateToken(ctx context.Context, rawToken string) (uuid
 		return uuid.Nil, fmt.Errorf("invalid token")
 	}
 
+	// Verify user is active (security fix: disabled users should not be able to use API tokens)
+	var isActive bool
+	activeQuery := `SELECT is_active FROM users WHERE id = $1`
+	err = s.db.QueryRowContext(ctx, activeQuery, userID).Scan(&isActive)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to verify user status: %w", err)
+	}
+
+	if !isActive {
+		return uuid.Nil, fmt.Errorf("user account is disabled")
+	}
+
 	return userID, nil
 }
 

@@ -33,19 +33,46 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunU
 
         // Get token from localStorage
         const token = typeof window !== 'undefined' ? localStorage.getItem('swiftlog_token') : null;
-        const wsUrl = `${WS_URL}/ws/runs/${runId}${token ? `?token=${token}` : ''}`;
+
+        // Connect without token in URL
+        const wsUrl = `${WS_URL}/ws/runs/${runId}`;
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          setConnectionStatus('connected');
-          reconnectAttempts.current = 0;
+          // Send authentication message after connection
+          if (token) {
+            ws.send(JSON.stringify({
+              type: 'auth',
+              token: token
+            }));
+          } else {
+            setConnectionStatus('error');
+            ws.close();
+            return;
+          }
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+
+            // Handle authentication response
+            if (data.type === 'auth_success') {
+              setConnectionStatus('connected');
+              reconnectAttempts.current = 0;
+              return;
+            }
+
+            // Handle authentication error
+            if (data.error) {
+              console.error('WebSocket error:', data.error);
+              setConnectionStatus('error');
+              ws.close();
+              return;
+            }
+
             if (data.type === 'log') {
               const newLog: LogLine = {
                 timestamp: data.timestamp,
@@ -55,7 +82,9 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunU
               setLogs((prev) => [...prev, newLog]);
             } else if (data.type === 'run_update') {
               // Run status changed (completed, failed, AI analysis updated, etc.)
-              console.log('Run update received:', data);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Run update received:', data);
+              }
               if (onRunUpdate) {
                 onRunUpdate();
               }

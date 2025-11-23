@@ -20,7 +20,6 @@ export default function RunDetailsPage({ params }: { params: Promise<{ id: strin
 
   // Handle run status update from WebSocket
   const handleRunUpdate = () => {
-    console.log('Refreshing run data due to WebSocket update');
     refreshRun();
 
     // If run just completed, also refresh logs to get complete set

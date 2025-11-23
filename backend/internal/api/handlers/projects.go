@@ -67,7 +67,7 @@ func (h *ProjectsHandler) CreateProject(c *gin.Context) {
 	userID := c.MustGet("user_id").(uuid.UUID)
 
 	var req struct {
-		Name string `json:"name" binding:"required"`
+		Name string `json:"name" binding:"required,min=1,max=255"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -58,6 +58,54 @@ func AdminMiddleware(userRepo *repository.UserRepository) gin.HandlerFunc {
 	}
 }
 
+// StrictAdminMiddleware performs real-time database verification for critical admin operations
+// Use this for: user deletion, admin promotion, system config changes
+// This prevents the privilege escalation window where a revoked admin can still operate
+// until their JWT expires (typically 2 hours)
+func StrictAdminMiddleware(userRepo *repository.UserRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get user ID from context (set by AuthMiddleware)
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.Abort()
+			return
+		}
+
+		uid, ok := userID.(uuid.UUID)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+			c.Abort()
+			return
+		}
+
+		// Real-time verification from database
+		user, err := userRepo.GetByID(c.Request.Context(), uid)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+			c.Abort()
+			return
+		}
+
+		// Verify user is both admin AND active
+		if !user.IsAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges required"})
+			c.Abort()
+			return
+		}
+
+		if !user.IsActive {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Account is disabled"})
+			c.Abort()
+			return
+		}
+
+		// Store user in context for handlers that need it
+		c.Set("user", user)
+		c.Next()
+	}
+}
+
 // ActiveUserMiddleware checks if the authenticated user is active
 func ActiveUserMiddleware(userRepo *repository.UserRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {

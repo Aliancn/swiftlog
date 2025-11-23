@@ -24,21 +24,51 @@ export default function RunStatusSubscriber({ runId, onRunUpdate }: RunStatusSub
       try {
         // Get token from localStorage
         const token = typeof window !== 'undefined' ? localStorage.getItem('swiftlog_token') : null;
-        const wsUrl = `${WS_URL}/ws/runs/${runId}${token ? `?token=${token}` : ''}`;
+
+        // Connect without token in URL
+        const wsUrl = `${WS_URL}/ws/runs/${runId}`;
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log('RunStatusSubscriber connected for run:', runId);
-          reconnectAttempts.current = 0;
+          // Send authentication message after connection
+          if (token) {
+            ws.send(JSON.stringify({
+              type: 'auth',
+              token: token
+            }));
+          } else {
+            console.error('No auth token available');
+            ws.close();
+            return;
+          }
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+
+            // Handle authentication response
+            if (data.type === 'auth_success') {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('RunStatusSubscriber authenticated for run:', runId);
+              }
+              reconnectAttempts.current = 0;
+              return;
+            }
+
+            // Handle authentication error
+            if (data.error) {
+              console.error('RunStatusSubscriber auth error:', data.error);
+              ws.close();
+              return;
+            }
+
             if (data.type === 'run_update') {
-              console.log('Run status update received:', data);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Run status update received:', data);
+              }
               onRunUpdate();
             }
           } catch (error) {
@@ -47,11 +77,15 @@ export default function RunStatusSubscriber({ runId, onRunUpdate }: RunStatusSub
         };
 
         ws.onerror = () => {
-          console.error('RunStatusSubscriber connection error');
+          if (process.env.NODE_ENV === 'development') {
+            console.error('RunStatusSubscriber connection error');
+          }
         };
 
         ws.onclose = () => {
-          console.log('RunStatusSubscriber disconnected');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('RunStatusSubscriber disconnected');
+          }
 
           // Attempt to reconnect with exponential backoff
           if (reconnectAttempts.current < maxReconnectAttempts) {

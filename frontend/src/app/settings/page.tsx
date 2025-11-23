@@ -153,30 +153,66 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-2">
               AI API Key
-              {data?.has_api_key && !apiKeyChanged && (
-                <span className="ml-2 text-xs text-green-600">● Key configured</span>
-              )}
             </label>
-            <div className="flex gap-2">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                value={formData.ai_api_key}
-                onChange={(e) => {
-                  setFormData({ ...formData, ai_api_key: e.target.value });
-                  setApiKeyChanged(true);
-                }}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={data?.has_api_key ? '••••••••••••••••' : 'Enter API key'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                {showApiKey ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <p className="text-sm text-gray-500 mt-1">Leave empty to keep existing key</p>
+
+            {data?.has_api_key && !apiKeyChanged ? (
+              // Display masked key when configured and not being changed
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-300 rounded-md">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-gray-700">
+                    API Key configured (ends with: ••••{data.api_key_last4 || '****'})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setApiKeyChanged(true)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  Change API Key
+                </button>
+              </div>
+            ) : (
+              // Show input field when no key or user wants to change
+              <div className="flex gap-2">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={formData.ai_api_key}
+                  onChange={(e) => {
+                    setFormData({ ...formData, ai_api_key: e.target.value });
+                    setApiKeyChanged(true);
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter API key"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  {showApiKey ? 'Hide' : 'Show'}
+                </button>
+                {data?.has_api_key && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApiKeyChanged(false);
+                      setFormData({ ...formData, ai_api_key: '' });
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-gray-500 mt-1">
+              {data?.has_api_key && apiKeyChanged
+                ? 'Enter new API key or leave empty to keep existing'
+                : 'OpenAI-compatible API key'}
+            </p>
           </div>
 
           {/* AI Model */}

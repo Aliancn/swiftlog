@@ -3,11 +3,18 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+)
+
+const (
+	// Maximum size for Redis published messages (256KB)
+	// This prevents memory exhaustion and DoS via oversized broadcasts
+	maxRedisMessageSize = 256 * 1024
 )
 
 // Hub maintains the set of active clients and broadcasts messages
@@ -180,6 +187,11 @@ func PublishLog(ctx context.Context, redisClient *redis.Client, runID uuid.UUID,
 		return err
 	}
 
+	// Validate message size to prevent DoS attacks
+	if len(data) > maxRedisMessageSize {
+		return fmt.Errorf("message size %d exceeds maximum allowed size %d", len(data), maxRedisMessageSize)
+	}
+
 	return redisClient.Publish(ctx, "swiftlog:logs", data).Err()
 }
 
@@ -197,6 +209,11 @@ func PublishRunUpdate(ctx context.Context, redisClient *redis.Client, runID uuid
 	data, err := json.Marshal(updateMsg)
 	if err != nil {
 		return err
+	}
+
+	// Validate message size to prevent DoS attacks
+	if len(data) > maxRedisMessageSize {
+		return fmt.Errorf("message size %d exceeds maximum allowed size %d", len(data), maxRedisMessageSize)
 	}
 
 	return redisClient.Publish(ctx, "swiftlog:logs", data).Err()

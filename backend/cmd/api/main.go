@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -125,6 +126,23 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
+	// Configure request size limits to prevent DoS attacks
+	// Limit multipart form memory to 8 MiB
+	router.MaxMultipartMemory = 8 << 20 // 8 MiB
+
+	// Add middleware to limit general request body size
+	router.Use(func(c *gin.Context) {
+		const maxRequestSize = 10 << 20 // 10 MiB
+		if c.Request.ContentLength > maxRequestSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": "Request body too large (max 10 MiB)",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	})
+
 	// Parse CORS origins from environment
 	allowedOrigins := strings.Split(corsOrigins, ",")
 	for i := range allowedOrigins {
@@ -147,12 +165,15 @@ func main() {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
 
+	// Check if in production mode
+	isProduction := environment == "production"
+
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
 		// Auth endpoints (no auth required, but rate limited)
 		auth := v1.Group("/auth")
-		auth.Use(middleware.AuthRateLimitMiddleware(redisClient))
+		auth.Use(middleware.AuthRateLimitMiddleware(redisClient, isProduction))
 		{
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/register", authHandler.Register)
@@ -217,14 +238,21 @@ func main() {
 			admin.GET("/users", adminHandler.ListUsers)
 			admin.GET("/users/stats", adminHandler.GetUserStats)
 			admin.PUT("/users/:id/status", adminHandler.UpdateUserStatus)
-			admin.PUT("/users/:id/admin", adminHandler.UpdateUserAdminStatus)
-			admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
+			// Critical admin operations - use strict verification
+			// These verify admin status in real-time from database
+			adminStrict := admin.Group("")
+			adminStrict.Use(middleware.StrictAdminMiddleware(userRepo))
+			{
+				adminStrict.PUT("/users/:id/admin", adminHandler.UpdateUserAdminStatus)
+				adminStrict.DELETE("/users/:id", adminHandler.DeleteUser)
+				adminStrict.DELETE("/config/:key", adminHandler.DeleteSystemConfig)
+			}
 
 			// System configuration
 			admin.GET("/config", adminHandler.ListSystemConfig)
 			admin.GET("/config/:key", adminHandler.GetSystemConfig)
 			admin.PUT("/config/:key", adminHandler.UpdateSystemConfig)
-			admin.DELETE("/config/:key", adminHandler.DeleteSystemConfig)
 
 			// System statistics
 			admin.GET("/stats", adminHandler.GetSystemStats)
@@ -286,7 +314,7 @@ func initializeAdmin(ctx context.Context, userRepo *repository.UserRepository, s
 
 // validateJWTSecret validates JWT secret strength
 func validateJWTSecret(secret, environment string) error {
-	// List of common weak secrets
+	// List of common weak secrets (exact matches)
 	weakSecrets := []string{
 		"your-secret-key-change-this-in-production",
 		"secret",
@@ -298,18 +326,43 @@ func validateJWTSecret(secret, environment string) error {
 		"default",
 	}
 
+	// Weak patterns that should not appear in secrets (substring check)
+	weakPatterns := []string{
+		"secret",
+		"changeme",
+		"password",
+		"admin",
+		"test",
+		"dev",
+		"demo",
+		"example",
+	}
+
 	// In production, enforce strict validation
 	if environment == "production" {
-		// Check against weak secret list
+		// 1. Check for empty secret
+		if secret == "" {
+			return fmt.Errorf("SECURITY: JWT_SECRET must be set in production. Generate with: openssl rand -base64 32")
+		}
+
+		// 2. Check against weak secret list (exact matches)
 		for _, weak := range weakSecrets {
 			if secret == weak {
 				return fmt.Errorf("SECURITY: JWT_SECRET is set to a default/weak value in production. Please set a strong random secret")
 			}
 		}
 
-		// Enforce minimum length (256 bits = 32 bytes)
+		// 3. Enforce minimum length (256 bits = 32 bytes)
 		if len(secret) < 32 {
 			return fmt.Errorf("SECURITY: JWT_SECRET must be at least 32 characters in production, got %d. Generate with: openssl rand -base64 32", len(secret))
+		}
+
+		// 4. Check for weak patterns (substring matches)
+		secretLower := strings.ToLower(secret)
+		for _, pattern := range weakPatterns {
+			if strings.Contains(secretLower, pattern) {
+				return fmt.Errorf("SECURITY: JWT_SECRET contains weak pattern '%s'. Please use a randomly generated secret", pattern)
+			}
 		}
 
 		log.Println("JWT secret validated successfully for production environment")

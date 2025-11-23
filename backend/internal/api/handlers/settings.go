@@ -38,10 +38,18 @@ func (h *SettingsHandler) GetUserSettings(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	// Prepare response with masked API key
+	response := gin.H{
 		"settings":     settings,
 		"has_api_key": settings.AIAPIKey.Valid && settings.AIAPIKey.String != "",
-	})
+	}
+
+	// Add last 4 characters of API key for display (security: mask the rest)
+	if settings.AIAPIKey.Valid && len(settings.AIAPIKey.String) >= 4 {
+		response["api_key_last4"] = settings.AIAPIKey.String[len(settings.AIAPIKey.String)-4:]
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // UpdateUserSettings updates current user's settings
@@ -51,14 +59,14 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 
 	var req struct {
 		AIEnabled             bool                     `json:"ai_enabled"`
-		AIBaseURL             string                   `json:"ai_base_url" binding:"required"`
+		AIBaseURL             string                   `json:"ai_base_url" binding:"required,url,max=500"`
 		AIAPIKey              *string                  `json:"ai_api_key"` // null = don't update
-		AIModel               string                   `json:"ai_model" binding:"required"`
+		AIModel               string                   `json:"ai_model" binding:"required,min=1,max=100"`
 		AIMaxTokens           int                      `json:"ai_max_tokens" binding:"required,min=1"`
 		AIAutoAnalyze         bool                     `json:"ai_auto_analyze"`
 		AIMaxLogLines         int                      `json:"ai_max_log_lines" binding:"required,min=1"`
 		AILogTruncateStrategy models.TruncateStrategy `json:"ai_log_truncate_strategy" binding:"required"`
-		AIPromptLanguage      string                   `json:"ai_prompt_language" binding:"required"`
+		AIPromptLanguage      string                   `json:"ai_prompt_language" binding:"required,min=2,max=10"`
 		AIMaxConcurrent       int                      `json:"ai_max_concurrent" binding:"required,min=1,max=10"`
 	}
 
@@ -104,10 +112,19 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 
 	// Fetch updated settings
 	updated, _ := h.settingsRepo.GetUserSettings(c.Request.Context(), userID)
-	c.JSON(http.StatusOK, gin.H{
+
+	// Prepare response with masked API key
+	response := gin.H{
 		"settings":     updated,
 		"has_api_key": updated.AIAPIKey.Valid && updated.AIAPIKey.String != "",
-	})
+	}
+
+	// Add last 4 characters of API key for display (security: mask the rest)
+	if updated.AIAPIKey.Valid && len(updated.AIAPIKey.String) >= 4 {
+		response["api_key_last4"] = updated.AIAPIKey.String[len(updated.AIAPIKey.String)-4:]
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // GetProjectSettings returns project-specific settings
@@ -148,10 +165,18 @@ func (h *SettingsHandler) GetProjectSettings(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	// Prepare response with masked API key
+	response := gin.H{
 		"settings":     settings,
 		"has_api_key": settings.AIAPIKey.Valid && settings.AIAPIKey.String != "",
-	})
+	}
+
+	// Add last 4 characters of API key for display (security: mask the rest)
+	if settings.AIAPIKey.Valid && len(settings.AIAPIKey.String) >= 4 {
+		response["api_key_last4"] = settings.AIAPIKey.String[len(settings.AIAPIKey.String)-4:]
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // UpdateProjectSettings updates project-specific settings
@@ -177,14 +202,14 @@ func (h *SettingsHandler) UpdateProjectSettings(c *gin.Context) {
 
 	var req struct {
 		AIEnabled             *bool                     `json:"ai_enabled"`
-		AIBaseURL             *string                   `json:"ai_base_url"`
+		AIBaseURL             *string                   `json:"ai_base_url" binding:"omitempty,url,max=500"`
 		AIAPIKey              *string                   `json:"ai_api_key"`
-		AIModel               *string                   `json:"ai_model"`
-		AIMaxTokens           *int                      `json:"ai_max_tokens"`
+		AIModel               *string                   `json:"ai_model" binding:"omitempty,min=1,max=100"`
+		AIMaxTokens           *int                      `json:"ai_max_tokens" binding:"omitempty,min=1"`
 		AIAutoAnalyze         *bool                     `json:"ai_auto_analyze"`
-		AIMaxLogLines         *int                      `json:"ai_max_log_lines"`
+		AIMaxLogLines         *int                      `json:"ai_max_log_lines" binding:"omitempty,min=1"`
 		AILogTruncateStrategy *models.TruncateStrategy `json:"ai_log_truncate_strategy"`
-		AIPromptLanguage      *string                   `json:"ai_prompt_language"`
+		AIPromptLanguage      *string                   `json:"ai_prompt_language" binding:"omitempty,min=2,max=10"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -220,10 +245,19 @@ func (h *SettingsHandler) UpdateProjectSettings(c *gin.Context) {
 
 	// Fetch updated settings
 	updated, _ := h.settingsRepo.GetProjectSettings(c.Request.Context(), projectID)
-	c.JSON(http.StatusOK, gin.H{
+
+	// Prepare response with masked API key
+	response := gin.H{
 		"settings":     updated,
 		"has_api_key": updated != nil && updated.AIAPIKey.Valid && updated.AIAPIKey.String != "",
-	})
+	}
+
+	// Add last 4 characters of API key for display (security: mask the rest)
+	if updated != nil && updated.AIAPIKey.Valid && len(updated.AIAPIKey.String) >= 4 {
+		response["api_key_last4"] = updated.AIAPIKey.String[len(updated.AIAPIKey.String)-4:]
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // DeleteProjectSettings deletes project-specific settings

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -173,11 +174,14 @@ func (c *Client) QueryLogs(ctx context.Context, runID uuid.UUID) ([]LogEntry, er
 	end := time.Now()
 	start := end.Add(-7 * 24 * time.Hour)
 
-	// Build query URL with time range
-	url := fmt.Sprintf("%s/loki/api/v1/query_range?query=%s&start=%d&end=%d&direction=forward&limit=10000",
-		c.baseURL, query, start.UnixNano(), end.UnixNano())
+	// URL encode the query parameter to prevent LogQL injection
+	encodedQuery := url.QueryEscape(query)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	// Build query URL with time range
+	queryURL := fmt.Sprintf("%s/loki/api/v1/query_range?query=%s&start=%d&end=%d&direction=forward&limit=10000",
+		c.baseURL, encodedQuery, start.UnixNano(), end.UnixNano())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", queryURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create query request: %w", err)
 	}

@@ -127,6 +127,20 @@ func (h *AdminHandler) UpdateUserAdminStatus(c *gin.Context) {
 		return
 	}
 
+	// Security: Prevent removing the last admin
+	if !req.IsAdmin {
+		adminCount, err := h.userRepo.CountAdmins(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check admin count"})
+			return
+		}
+
+		if adminCount <= 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot remove the last admin user"})
+			return
+		}
+	}
+
 	if err := h.userRepo.UpdateAdminStatus(c.Request.Context(), userID, req.IsAdmin); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update admin status"})
 		return
@@ -149,6 +163,26 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 	if userID == currentUserID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete your own account"})
 		return
+	}
+
+	// Security: Prevent deleting the last admin
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if user.IsAdmin {
+		adminCount, err := h.userRepo.CountAdmins(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check admin count"})
+			return
+		}
+
+		if adminCount <= 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete the last admin user"})
+			return
+		}
 	}
 
 	if err := h.userRepo.Delete(c.Request.Context(), userID); err != nil {
@@ -195,7 +229,7 @@ func (h *AdminHandler) UpdateSystemConfig(c *gin.Context) {
 	userID := c.MustGet("user_id").(uuid.UUID)
 
 	var req struct {
-		Value string `json:"value" binding:"required"`
+		Value string `json:"value" binding:"required,max=1000"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
