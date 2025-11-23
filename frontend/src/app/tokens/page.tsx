@@ -55,14 +55,15 @@ export default function TokensPage() {
     }
   };
 
-  const handleDeleteToken = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this token?')) {
+  const handleDeleteToken = async (id: string, tokenName: string) => {
+    if (!confirm(`Are you sure you want to delete token "${tokenName}"?`)) {
       return;
     }
 
     try {
       await api.deleteToken(id);
       await loadTokens();
+      setError(''); // Clear any previous errors
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete token');
     }
@@ -89,8 +90,19 @@ export default function TokensPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">API Tokens</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage your API tokens for CLI and programmatic access
+            Create and manage API tokens for CLI tools to upload logs
           </p>
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <p className="text-sm text-blue-900 font-medium mb-2">
+              What are API Tokens?
+            </p>
+            <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+              <li>API tokens are used by CLI tools (swiftlog CLI) to authenticate when uploading logs</li>
+              <li>Web login uses JWT sessions, not API tokens</li>
+              <li>You can create multiple tokens for different machines or purposes</li>
+              <li>Tokens never expire unless manually deleted</li>
+            </ul>
+          </div>
         </div>
 
         {error && (
@@ -183,7 +195,7 @@ export default function TokensPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => handleDeleteToken(token.id)}
+                        onClick={() => handleDeleteToken(token.id, token.name)}
                         className="text-red-600 hover:text-red-900"
                       >
                         Delete

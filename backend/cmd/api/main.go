@@ -31,6 +31,8 @@ func main() {
 	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
 	apiPort := getEnv("API_PORT", "8080")
 	environment := getEnv("ENVIRONMENT", "development")
+	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-this-in-production")
+	jwtExpiration := getEnvDuration("JWT_EXPIRATION", 24*time.Hour)
 
 	// Set Gin mode
 	if environment == "production" {
@@ -73,9 +75,11 @@ func main() {
 	logRunRepo := repository.NewLogRunRepository(db.DB)
 	userRepo := repository.NewUserRepository(db.DB)
 	settingsRepo := repository.NewSettingsRepository(db.DB)
+	systemConfigRepo := repository.NewSystemConfigRepository(db.DB)
 
-	// Initialize auth token service
+	// Initialize auth services
 	tokenService := auth.NewTokenService(db.DB)
+	jwtService := auth.NewJWTService(jwtSecret, jwtExpiration)
 
 	// Initialize admin user
 	log.Println("Initializing admin user...")
@@ -87,10 +91,11 @@ func main() {
 	projectsHandler := handlers.NewProjectsHandler(projectRepo, groupRepo)
 	groupsHandler := handlers.NewGroupsHandler(groupRepo, projectRepo)
 	runsHandler := handlers.NewRunsHandler(logRunRepo, groupRepo, projectRepo, lokiClient, taskQueue)
-	authHandler := handlers.NewAuthHandler(userRepo, settingsRepo, tokenService)
+	authHandler := handlers.NewAuthHandler(userRepo, settingsRepo, tokenService, jwtService, systemConfigRepo)
 	statusHandler := handlers.NewStatusHandler(logRunRepo, taskQueue)
 	settingsHandler := handlers.NewSettingsHandler(settingsRepo, projectRepo)
 	managementHandler := handlers.NewManagementHandler(projectRepo, groupRepo, logRunRepo)
+	adminHandler := handlers.NewAdminHandler(userRepo, systemConfigRepo)
 
 	// Create Gin router
 	router := gin.Default()
@@ -118,32 +123,34 @@ func main() {
 		{
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/register", authHandler.Register)
+			auth.GET("/registration-status", authHandler.GetRegistrationStatus)
 		}
 
-		// Public read-only endpoints (no auth required for development)
-		v1.GET("/projects", projectsHandler.ListProjects)
-		v1.GET("/projects/:id", projectsHandler.GetProject)
-		v1.GET("/projects/:id/groups", projectsHandler.GetProjectGroups)
-		v1.GET("/groups/:id", groupsHandler.GetGroup)
-		v1.GET("/groups/:id/runs", runsHandler.ListRuns)
-		v1.GET("/runs/:id", runsHandler.GetRun)
-		v1.GET("/runs/:id/logs", runsHandler.GetRunLogs)
-
-		// Status endpoints (no auth required for development)
-		v1.GET("/status/statistics", statusHandler.GetStatistics)
-		v1.GET("/status/recent", statusHandler.GetRecentRuns)
-
-		// Protected endpoints (auth required)
+		// Protected endpoints (JWT auth required for Web UI)
 		protected := v1.Group("")
-		protected.Use(middleware.AuthMiddleware(tokenService))
+		protected.Use(middleware.JWTAuthMiddleware(jwtService))
+		protected.Use(middleware.ActiveUserMiddleware(userRepo))
 		{
-			// Project management
+			// Project and data access (read)
+			protected.GET("/projects", projectsHandler.ListProjects)
+			protected.GET("/projects/:id", projectsHandler.GetProject)
+			protected.GET("/projects/:id/groups", projectsHandler.GetProjectGroups)
+			protected.GET("/groups/:id", groupsHandler.GetGroup)
+			protected.GET("/groups/:id/runs", runsHandler.ListRuns)
+			protected.GET("/runs/:id", runsHandler.GetRun)
+			protected.GET("/runs/:id/logs", runsHandler.GetRunLogs)
+
+			// Status endpoints
+			protected.GET("/status/statistics", statusHandler.GetStatistics)
+			protected.GET("/status/recent", statusHandler.GetRecentRuns)
+			protected.POST("/status/archive-completed", statusHandler.ArchiveCompletedRuns)
+
+			// Project management (write)
 			protected.POST("/projects", projectsHandler.CreateProject)
 			protected.POST("/runs/:id/analyze", runsHandler.TriggerAIAnalysis)
 
 			// User management
 			protected.GET("/auth/me", authHandler.GetCurrentUser)
-			protected.GET("/auth/users", authHandler.ListUsers)
 
 			// Token management
 			protected.GET("/auth/tokens", authHandler.ListTokens)
@@ -166,6 +173,28 @@ func main() {
 			protected.PUT("/groups/:id", managementHandler.UpdateGroup)
 			protected.DELETE("/groups/:id", managementHandler.DeleteGroup)
 			protected.DELETE("/runs/:id", managementHandler.DeleteRun)
+		}
+
+		// Admin endpoints (JWT auth + admin role required)
+		admin := v1.Group("/admin")
+		admin.Use(middleware.JWTAuthMiddleware(jwtService))
+		admin.Use(middleware.AdminMiddleware(userRepo))
+		{
+			// User management
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.GET("/users/stats", adminHandler.GetUserStats)
+			admin.PUT("/users/:id/status", adminHandler.UpdateUserStatus)
+			admin.PUT("/users/:id/admin", adminHandler.UpdateUserAdminStatus)
+			admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
+			// System configuration
+			admin.GET("/config", adminHandler.ListSystemConfig)
+			admin.GET("/config/:key", adminHandler.GetSystemConfig)
+			admin.PUT("/config/:key", adminHandler.UpdateSystemConfig)
+			admin.DELETE("/config/:key", adminHandler.DeleteSystemConfig)
+
+			// System statistics
+			admin.GET("/stats", adminHandler.GetSystemStats)
 		}
 	}
 
@@ -209,6 +238,18 @@ func initDatabase(ctx context.Context, dbURL string) (*database.DB, error) {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			log.Printf("Warning: Invalid duration for %s, using default: %v", key, defaultValue)
+			return defaultValue
+		}
+		return duration
 	}
 	return defaultValue
 }

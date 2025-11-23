@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware creates a Gin middleware for JWT/token authentication
-func AuthMiddleware(tokenService *auth.TokenService) gin.HandlerFunc {
+// APITokenAuthMiddleware creates a Gin middleware for API token authentication (CLI tools)
+func APITokenAuthMiddleware(tokenService *auth.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -19,22 +19,22 @@ func AuthMiddleware(tokenService *auth.TokenService) gin.HandlerFunc {
 			return
 		}
 
-		// Extract token (support both "Bearer <token>" and plain token)
+		// Extract API token (support both "Bearer <token>" and plain token for CLI compatibility)
 		token := authHeader
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Empty token"})
 			c.Abort()
 			return
 		}
 
-		// Validate token
+		// Validate API token
 		userID, err := tokenService.ValidateToken(c.Request.Context(), token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API token"})
 			c.Abort()
 			return
 		}

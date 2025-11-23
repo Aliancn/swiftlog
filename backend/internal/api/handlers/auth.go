@@ -11,9 +11,11 @@ import (
 
 // AuthHandler handles authentication-related API requests
 type AuthHandler struct {
-	userRepo     *repository.UserRepository
-	settingsRepo *repository.SettingsRepository
-	tokenService *auth.TokenService
+	userRepo         *repository.UserRepository
+	settingsRepo     *repository.SettingsRepository
+	tokenService     *auth.TokenService
+	jwtService       *auth.JWTService
+	systemConfigRepo *repository.SystemConfigRepository
 }
 
 // NewAuthHandler creates a new auth handler
@@ -21,11 +23,15 @@ func NewAuthHandler(
 	userRepo *repository.UserRepository,
 	settingsRepo *repository.SettingsRepository,
 	tokenService *auth.TokenService,
+	jwtService *auth.JWTService,
+	systemConfigRepo *repository.SystemConfigRepository,
 ) *AuthHandler {
 	return &AuthHandler{
-		userRepo:     userRepo,
-		settingsRepo: settingsRepo,
-		tokenService: tokenService,
+		userRepo:         userRepo,
+		settingsRepo:     settingsRepo,
+		tokenService:     tokenService,
+		jwtService:       jwtService,
+		systemConfigRepo: systemConfigRepo,
 	}
 }
 
@@ -55,27 +61,41 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Create API token for session
-	rawToken, apiToken, err := h.tokenService.CreateToken(c.Request.Context(), user.ID, "web-session")
+	// Check if user is active
+	if !user.IsActive {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Account is disabled. Please contact administrator."})
+		return
+	}
+
+	// Update last login timestamp
+	_ = h.userRepo.UpdateLastLogin(c.Request.Context(), user.ID)
+
+	// Generate JWT token for web session
+	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": rawToken,
+		"token": jwtToken,
 		"user": gin.H{
 			"id":       user.ID,
 			"username": user.Username,
 			"is_admin": user.IsAdmin,
 		},
-		"token_info": apiToken,
 	})
 }
 
 // Register creates a new user account
 // POST /api/v1/auth/register
 func (h *AuthHandler) Register(c *gin.Context) {
+	// Check if registration is allowed
+	if !h.systemConfigRepo.IsRegistrationAllowed(c.Request.Context()) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User registration is currently disabled"})
+		return
+	}
+
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
@@ -108,21 +128,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.Request.Context().Value("logger")
 	}
 
-	// Create API token for session
-	rawToken, apiToken, err := h.tokenService.CreateToken(c.Request.Context(), user.ID, "web-session")
+	// Generate JWT token for web session
+	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"token": rawToken,
+		"token": jwtToken,
 		"user": gin.H{
 			"id":       user.ID,
 			"username": user.Username,
 			"is_admin": user.IsAdmin,
 		},
-		"token_info": apiToken,
 	})
 }
 
@@ -215,22 +234,11 @@ func (h *AuthHandler) DeleteToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Token deleted successfully"})
 }
 
-// ListUsers returns all users (admin only)
-// GET /api/v1/auth/users
-func (h *AuthHandler) ListUsers(c *gin.Context) {
-	// Check if user is admin
-	userID := c.MustGet("user_id").(uuid.UUID)
-	currentUser, err := h.userRepo.GetByID(c.Request.Context(), userID)
-	if err != nil || !currentUser.IsAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
-		return
-	}
-
-	users, err := h.userRepo.ListAll(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"users": users})
+// GetRegistrationStatus returns whether registration is allowed (public endpoint)
+// GET /api/v1/auth/registration-status
+func (h *AuthHandler) GetRegistrationStatus(c *gin.Context) {
+	allowed := h.systemConfigRepo.IsRegistrationAllowed(c.Request.Context())
+	c.JSON(http.StatusOK, gin.H{
+		"registration_allowed": allowed,
+	})
 }

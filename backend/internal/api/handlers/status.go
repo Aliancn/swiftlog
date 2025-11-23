@@ -7,6 +7,7 @@ import (
 	"github.com/aliancn/swiftlog/backend/internal/queue"
 	"github.com/aliancn/swiftlog/backend/internal/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // StatusHandler handles system status-related API requests
@@ -26,10 +27,12 @@ func NewStatusHandler(
 	}
 }
 
-// GetStatistics returns overall system statistics
+// GetStatistics returns statistics for the authenticated user
 // GET /api/v1/status/statistics
 func (h *StatusHandler) GetStatistics(c *gin.Context) {
-	stats, err := h.logRunRepo.GetStatusStatistics(c.Request.Context())
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	stats, err := h.logRunRepo.GetStatusStatisticsByUser(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch statistics"})
 		return
@@ -63,9 +66,11 @@ func (h *StatusHandler) GetStatistics(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetRecentRuns returns recent log runs
+// GetRecentRuns returns recent log runs for the authenticated user
 // GET /api/v1/status/recent
 func (h *StatusHandler) GetRecentRuns(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	// Parse limit parameter
 	limit := 20
 	if limitStr := c.Query("limit"); limitStr != "" {
@@ -74,7 +79,7 @@ func (h *StatusHandler) GetRecentRuns(c *gin.Context) {
 		}
 	}
 
-	runs, err := h.logRunRepo.ListRecentRuns(c.Request.Context(), limit)
+	runs, err := h.logRunRepo.ListRecentRunsByUser(c.Request.Context(), userID, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch recent runs"})
 		return
@@ -84,5 +89,22 @@ func (h *StatusHandler) GetRecentRuns(c *gin.Context) {
 		"data":  runs,
 		"total": len(runs),
 		"limit": limit,
+	})
+}
+
+// ArchiveCompletedRuns archives all completed/failed/aborted runs for the authenticated user
+// POST /api/v1/status/archive-completed
+func (h *StatusHandler) ArchiveCompletedRuns(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	rowsAffected, err := h.logRunRepo.ArchiveCompletedRunsByUser(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to archive completed runs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Completed runs archived successfully",
+		"archived_count": rowsAffected,
 	})
 }

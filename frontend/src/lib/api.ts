@@ -115,6 +115,12 @@ class APIClient {
     return response;
   }
 
+  async getRegistrationStatus(): Promise<{ registration_allowed: boolean }> {
+    // Don't use auth token for this public endpoint
+    const response = await fetch(`${this.baseURL}/auth/registration-status`);
+    return response.json();
+  }
+
   async getCurrentUser(): Promise<any> {
     return this.request('/auth/me');
   }
@@ -136,6 +142,62 @@ class APIClient {
 
   async listUsers(): Promise<{ users: any[] }> {
     return this.request('/auth/users');
+  }
+
+  // Admin - User Management
+  async adminListUsers(): Promise<{ users: any[] }> {
+    return this.request('/admin/users');
+  }
+
+  async adminGetUserStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    admins: number;
+  }> {
+    return this.request('/admin/users/stats');
+  }
+
+  async adminUpdateUserStatus(userId: string, isActive: boolean): Promise<void> {
+    return this.request(`/admin/users/${userId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: isActive }),
+    });
+  }
+
+  async adminUpdateUserAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
+    return this.request(`/admin/users/${userId}/admin`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_admin: isAdmin }),
+    });
+  }
+
+  async adminDeleteUser(userId: string): Promise<void> {
+    return this.request(`/admin/users/${userId}`, { method: 'DELETE' });
+  }
+
+  // Admin - System Configuration
+  async adminListConfig(): Promise<{ configs: any[] }> {
+    return this.request('/admin/config');
+  }
+
+  async adminGetConfig(key: string): Promise<any> {
+    return this.request(`/admin/config/${key}`);
+  }
+
+  async adminUpdateConfig(key: string, value: string): Promise<any> {
+    return this.request(`/admin/config/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async adminDeleteConfig(key: string): Promise<void> {
+    return this.request(`/admin/config/${key}`, { method: 'DELETE' });
+  }
+
+  async adminGetStats(): Promise<any> {
+    return this.request('/admin/stats');
   }
 
   // Status
@@ -162,6 +224,12 @@ class APIClient {
   async getRecentRuns(limit?: number): Promise<PaginatedResponse<LogRun>> {
     const query = limit ? `?limit=${limit}` : '';
     return this.request(`/status/recent${query}`);
+  }
+
+  async archiveCompletedRuns(): Promise<{ message: string; archived_count: number }> {
+    return this.request('/status/archive-completed', {
+      method: 'POST',
+    });
   }
 
   // Settings

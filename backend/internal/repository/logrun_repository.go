@@ -243,6 +243,57 @@ func (r *LogRunRepository) GetStatusStatistics(ctx context.Context) (*models.Sta
 	return stats, nil
 }
 
+// GetStatusStatisticsByUser retrieves statistics for a specific user's log runs and AI analysis
+func (r *LogRunRepository) GetStatusStatisticsByUser(ctx context.Context, userID uuid.UUID) (*models.StatusStatistics, error) {
+	stats := &models.StatusStatistics{}
+
+	// Get run status counts for user's runs (excluding archived)
+	query := `
+		SELECT
+			COUNT(*) FILTER (WHERE lr.status = 'running') as running,
+			COUNT(*) FILTER (WHERE lr.status = 'completed') as completed,
+			COUNT(*) FILTER (WHERE lr.status = 'failed') as failed,
+			COUNT(*) FILTER (WHERE lr.status = 'aborted') as aborted
+		FROM log_runs lr
+		JOIN log_groups lg ON lr.group_id = lg.id
+		JOIN projects p ON lg.project_id = p.id
+		WHERE p.user_id = $1 AND lr.is_archived = FALSE
+	`
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+		&stats.RunningCount,
+		&stats.CompletedCount,
+		&stats.FailedCount,
+		&stats.AbortedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get run statistics: %w", err)
+	}
+
+	// Get AI status counts for user's runs (excluding archived)
+	aiQuery := `
+		SELECT
+			COUNT(*) FILTER (WHERE lr.ai_status = 'pending') as pending,
+			COUNT(*) FILTER (WHERE lr.ai_status = 'processing') as processing,
+			COUNT(*) FILTER (WHERE lr.ai_status = 'completed') as completed,
+			COUNT(*) FILTER (WHERE lr.ai_status = 'failed') as failed
+		FROM log_runs lr
+		JOIN log_groups lg ON lr.group_id = lg.id
+		JOIN projects p ON lg.project_id = p.id
+		WHERE p.user_id = $1 AND lr.is_archived = FALSE
+	`
+	err = r.db.QueryRowContext(ctx, aiQuery, userID).Scan(
+		&stats.AIPendingCount,
+		&stats.AIProcessingCount,
+		&stats.AICompletedCount,
+		&stats.AIFailedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AI statistics: %w", err)
+	}
+
+	return stats, nil
+}
+
 // ListRecentRuns retrieves the most recent log runs across all groups
 func (r *LogRunRepository) ListRecentRuns(ctx context.Context, limit int) ([]*models.LogRun, error) {
 	query := `
@@ -279,6 +330,75 @@ func (r *LogRunRepository) ListRecentRuns(ctx context.Context, limit int) ([]*mo
 	}
 
 	return runs, nil
+}
+
+// ListRecentRunsByUser retrieves the most recent log runs for a specific user (excluding archived)
+func (r *LogRunRepository) ListRecentRunsByUser(ctx context.Context, userID uuid.UUID, limit int) ([]*models.LogRun, error) {
+	query := `
+		SELECT lr.id, lr.group_id, lr.start_time, lr.end_time, lr.status, lr.exit_code, lr.ai_report, lr.ai_status, lr.is_archived, lr.created_at, lr.updated_at
+		FROM log_runs lr
+		JOIN log_groups lg ON lr.group_id = lg.id
+		JOIN projects p ON lg.project_id = p.id
+		WHERE p.user_id = $1 AND lr.is_archived = FALSE
+		ORDER BY lr.start_time DESC
+		LIMIT $2
+	`
+	rows, err := r.db.QueryContext(ctx, query, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*models.LogRun
+	for rows.Next() {
+		run := &models.LogRun{}
+		err := rows.Scan(
+			&run.ID,
+			&run.GroupID,
+			&run.StartTime,
+			&run.EndTime,
+			&run.Status,
+			&run.ExitCode,
+			&run.AIReport,
+			&run.AIStatus,
+			&run.IsArchived,
+			&run.CreatedAt,
+			&run.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan log run: %w", err)
+		}
+		runs = append(runs, run)
+	}
+
+	return runs, nil
+}
+
+// ArchiveCompletedRunsByUser archives all completed/failed/aborted runs for a user
+func (r *LogRunRepository) ArchiveCompletedRunsByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	query := `
+		UPDATE log_runs SET is_archived = TRUE
+		WHERE id IN (
+			SELECT lr.id
+			FROM log_runs lr
+			JOIN log_groups lg ON lr.group_id = lg.id
+			JOIN projects p ON lg.project_id = p.id
+			WHERE p.user_id = $1
+			  AND lr.status IN ('completed', 'failed', 'aborted')
+			  AND lr.is_archived = FALSE
+		)
+	`
+	result, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to archive completed runs: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
 
 // Delete deletes a log run

@@ -43,12 +43,14 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	user := &models.User{}
-	query := `SELECT id, username, password_hash, is_admin, created_at FROM users WHERE id = $1`
+	query := `SELECT id, username, password_hash, is_admin, is_active, last_login, created_at FROM users WHERE id = $1`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
 		&user.IsAdmin,
+		&user.IsActive,
+		&user.LastLogin,
 		&user.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -63,12 +65,14 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 // GetByUsername retrieves a user by username
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	user := &models.User{}
-	query := `SELECT id, username, password_hash, is_admin, created_at FROM users WHERE username = $1`
+	query := `SELECT id, username, password_hash, is_admin, is_active, last_login, created_at FROM users WHERE username = $1`
 	err := r.db.QueryRowContext(ctx, query, username).Scan(
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
 		&user.IsAdmin,
+		&user.IsActive,
+		&user.LastLogin,
 		&user.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -106,7 +110,7 @@ func (r *UserRepository) Count(ctx context.Context) (int, error) {
 // ListAll retrieves all users
 func (r *UserRepository) ListAll(ctx context.Context) ([]*models.User, error) {
 	query := `
-		SELECT id, username, is_admin, created_at
+		SELECT id, username, is_admin, is_active, last_login, created_at
 		FROM users
 		ORDER BY created_at DESC
 	`
@@ -123,6 +127,8 @@ func (r *UserRepository) ListAll(ctx context.Context) ([]*models.User, error) {
 			&user.ID,
 			&user.Username,
 			&user.IsAdmin,
+			&user.IsActive,
+			&user.LastLogin,
 			&user.CreatedAt,
 		)
 		if err != nil {
@@ -132,4 +138,71 @@ func (r *UserRepository) ListAll(ctx context.Context) ([]*models.User, error) {
 	}
 
 	return users, nil
+}
+
+// UpdateStatus updates a user's active status
+func (r *UserRepository) UpdateStatus(ctx context.Context, userID uuid.UUID, isActive bool) error {
+	query := `UPDATE users SET is_active = $1 WHERE id = $2`
+	result, err := r.db.ExecContext(ctx, query, isActive, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
+// UpdateAdminStatus updates a user's admin status
+func (r *UserRepository) UpdateAdminStatus(ctx context.Context, userID uuid.UUID, isAdmin bool) error {
+	query := `UPDATE users SET is_admin = $1 WHERE id = $2`
+	result, err := r.db.ExecContext(ctx, query, isAdmin, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update admin status: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
+// UpdateLastLogin updates the last login timestamp
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET last_login = NOW() WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update last login: %w", err)
+	}
+	return nil
+}
+
+// Delete deletes a user account
+func (r *UserRepository) Delete(ctx context.Context, userID uuid.UUID) error {
+	query := `DELETE FROM users WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
 }

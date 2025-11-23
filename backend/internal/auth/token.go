@@ -172,3 +172,23 @@ func (s *TokenService) ListTokensByUserID(ctx context.Context, userID uuid.UUID)
 
 	return tokens, nil
 }
+
+// RevokeTokensByUserAndName deletes all tokens for a specific user with a specific name
+func (s *TokenService) RevokeTokensByUserAndName(ctx context.Context, userID uuid.UUID, name string) error {
+	query := `DELETE FROM api_tokens WHERE user_id = $1 AND name = $2`
+	result, err := s.db.ExecContext(ctx, query, userID, name)
+	if err != nil {
+		return fmt.Errorf("failed to revoke tokens: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// It's OK if no tokens were found (rowsAffected == 0)
+	// This just means this is the first login
+	_ = rowsAffected
+
+	return nil
+}

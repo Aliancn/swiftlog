@@ -10,11 +10,49 @@ import (
 
 // User represents an authenticated user of the platform
 type User struct {
-	ID           uuid.UUID `json:"id" db:"id"`
-	Username     string    `json:"username" db:"username"`
-	PasswordHash string    `json:"-" db:"password_hash"` // Never expose in JSON
-	IsAdmin      bool      `json:"is_admin" db:"is_admin"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	ID           uuid.UUID     `json:"id" db:"id"`
+	Username     string        `json:"username" db:"username"`
+	PasswordHash string        `json:"-" db:"password_hash"` // Never expose in JSON
+	IsAdmin      bool          `json:"is_admin" db:"is_admin"`
+	IsActive     bool          `json:"is_active" db:"is_active"`
+	LastLogin    sql.NullTime  `json:"-" db:"last_login"`
+	CreatedAt    time.Time     `json:"created_at" db:"created_at"`
+}
+
+// MarshalJSON implements custom JSON serialization for User
+func (u User) MarshalJSON() ([]byte, error) {
+	type Alias User
+	return json.Marshal(&struct {
+		*Alias
+		LastLogin *time.Time `json:"last_login,omitempty"`
+	}{
+		Alias:     (*Alias)(&u),
+		LastLogin: nullTimeToPtr(u.LastLogin),
+	})
+}
+
+// SystemConfig represents a system-wide configuration setting
+type SystemConfig struct {
+	ID          uuid.UUID     `json:"id" db:"id"`
+	Key         string        `json:"key" db:"key"`
+	Value       string        `json:"value" db:"value"`
+	Description sql.NullString `json:"-" db:"description"`
+	UpdatedAt   time.Time     `json:"updated_at" db:"updated_at"`
+	UpdatedBy   uuid.NullUUID `json:"-" db:"updated_by"`
+}
+
+// MarshalJSON implements custom JSON serialization for SystemConfig
+func (sc SystemConfig) MarshalJSON() ([]byte, error) {
+	type Alias SystemConfig
+	return json.Marshal(&struct {
+		*Alias
+		Description *string    `json:"description,omitempty"`
+		UpdatedBy   *uuid.UUID `json:"updated_by,omitempty"`
+	}{
+		Alias:       (*Alias)(&sc),
+		Description: nullStringToPtr(sc.Description),
+		UpdatedBy:   nullUUIDToPtr(sc.UpdatedBy),
+	})
 }
 
 // APIToken stores API tokens for authenticating the CLI and other clients
@@ -65,16 +103,17 @@ const (
 
 // LogRun represents a single execution of a logged script
 type LogRun struct {
-	ID        uuid.UUID      `json:"id" db:"id"`
-	GroupID   uuid.UUID      `json:"group_id" db:"group_id"`
-	StartTime time.Time      `json:"start_time" db:"start_time"`
-	EndTime   sql.NullTime   `json:"-" db:"end_time"`
-	Status    RunStatus      `json:"status" db:"status"`
-	ExitCode  sql.NullInt32  `json:"-" db:"exit_code"`
-	AIReport  sql.NullString `json:"-" db:"ai_report"`
-	AIStatus  AIStatus       `json:"ai_status" db:"ai_status"`
-	CreatedAt time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
+	ID         uuid.UUID      `json:"id" db:"id"`
+	GroupID    uuid.UUID      `json:"group_id" db:"group_id"`
+	StartTime  time.Time      `json:"start_time" db:"start_time"`
+	EndTime    sql.NullTime   `json:"-" db:"end_time"`
+	Status     RunStatus      `json:"status" db:"status"`
+	ExitCode   sql.NullInt32  `json:"-" db:"exit_code"`
+	AIReport   sql.NullString `json:"-" db:"ai_report"`
+	AIStatus   AIStatus       `json:"ai_status" db:"ai_status"`
+	IsArchived bool           `json:"is_archived" db:"is_archived"`
+	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at" db:"updated_at"`
 }
 
 // MarshalJSON implements custom JSON serialization for LogRun
@@ -110,6 +149,13 @@ func nullInt32ToPtr(ni sql.NullInt32) *int32 {
 func nullStringToPtr(ns sql.NullString) *string {
 	if ns.Valid {
 		return &ns.String
+	}
+	return nil
+}
+
+func nullUUIDToPtr(nu uuid.NullUUID) *uuid.UUID {
+	if nu.Valid {
+		return &nu.UUID
 	}
 	return nil
 }

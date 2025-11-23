@@ -22,23 +22,12 @@ func NewProjectsHandler(projectRepo *repository.ProjectRepository, groupRepo *re
 	}
 }
 
-// ListProjects returns all projects for the authenticated user (or all projects if no auth)
+// ListProjects returns all projects for the authenticated user
 // GET /api/v1/projects
 func (h *ProjectsHandler) ListProjects(c *gin.Context) {
-	// Get user ID if authenticated, otherwise return all projects
-	userIDVal, exists := c.Get("user_id")
+	userID := c.MustGet("user_id").(uuid.UUID)
 
-	var projects interface{}
-	var err error
-
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		projects, err = h.projectRepo.ListByUserID(c.Request.Context(), userID)
-	} else {
-		// Development mode: return all projects
-		projects, err = h.projectRepo.ListAll(c.Request.Context())
-	}
-
+	projects, err := h.projectRepo.ListByUserID(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
 		return
@@ -50,6 +39,7 @@ func (h *ProjectsHandler) ListProjects(c *gin.Context) {
 // GetProject returns a specific project by ID
 // GET /api/v1/projects/:id
 func (h *ProjectsHandler) GetProject(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
 	projectID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
@@ -62,14 +52,10 @@ func (h *ProjectsHandler) GetProject(c *gin.Context) {
 		return
 	}
 
-	// Verify ownership if authenticated
-	userIDVal, exists := c.Get("user_id")
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		if project.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		}
+	// Verify ownership
+	if project.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
 	}
 
 	c.JSON(http.StatusOK, project)
@@ -101,27 +87,23 @@ func (h *ProjectsHandler) CreateProject(c *gin.Context) {
 // GetProjectGroups returns all log groups for a specific project
 // GET /api/v1/projects/:id/groups
 func (h *ProjectsHandler) GetProjectGroups(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
 	projectID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
 		return
 	}
 
-	// Verify project exists
+	// Verify project exists and ownership
 	project, err := h.projectRepo.GetByID(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
 		return
 	}
 
-	// Verify ownership if authenticated
-	userIDVal, exists := c.Get("user_id")
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		if project.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		}
+	if project.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
 	}
 
 	// Get groups for this project

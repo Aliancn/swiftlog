@@ -41,27 +41,24 @@ func NewRunsHandler(
 // ListRuns returns runs for a specific group
 // GET /api/v1/groups/:id/runs
 func (h *RunsHandler) ListRuns(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
 		return
 	}
 
-	// Verify group ownership if authenticated
-	userIDVal, exists := c.Get("user_id")
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		group, err := h.groupRepo.GetByID(c.Request.Context(), groupID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Group not found"})
-			return
-		}
+	// Verify group ownership
+	group, err := h.groupRepo.GetByID(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Group not found"})
+		return
+	}
 
-		project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
-		if err != nil || project.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		}
+	project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
+	if err != nil || project.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
 	}
 
 	// Parse pagination params
@@ -96,6 +93,7 @@ func (h *RunsHandler) ListRuns(c *gin.Context) {
 // GetRun returns a specific run by ID
 // GET /api/v1/runs/:id
 func (h *RunsHandler) GetRun(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
 	runID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid run ID"})
@@ -108,21 +106,17 @@ func (h *RunsHandler) GetRun(c *gin.Context) {
 		return
 	}
 
-	// Verify ownership if authenticated
-	userIDVal, exists := c.Get("user_id")
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		group, err := h.groupRepo.GetByID(c.Request.Context(), run.GroupID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify ownership"})
-			return
-		}
+	// Verify ownership
+	group, err := h.groupRepo.GetByID(c.Request.Context(), run.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify ownership"})
+		return
+	}
 
-		project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
-		if err != nil || project.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		}
+	project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
+	if err != nil || project.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
 	}
 
 	c.JSON(http.StatusOK, run)
@@ -131,33 +125,30 @@ func (h *RunsHandler) GetRun(c *gin.Context) {
 // GetRunLogs returns logs for a specific run from Loki
 // GET /api/v1/runs/:id/logs
 func (h *RunsHandler) GetRunLogs(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
 	runID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid run ID"})
 		return
 	}
 
-	// Verify ownership if authenticated
-	userIDVal, exists := c.Get("user_id")
-	if exists {
-		userID := userIDVal.(uuid.UUID)
-		run, err := h.logRunRepo.GetByID(c.Request.Context(), runID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
-			return
-		}
+	// Verify ownership
+	run, err := h.logRunRepo.GetByID(c.Request.Context(), runID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Run not found"})
+		return
+	}
 
-		group, err := h.groupRepo.GetByID(c.Request.Context(), run.GroupID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify ownership"})
-			return
-		}
+	group, err := h.groupRepo.GetByID(c.Request.Context(), run.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify ownership"})
+		return
+	}
 
-		project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
-		if err != nil || project.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-			return
-		}
+	project, err := h.projectRepo.GetByID(c.Request.Context(), group.ProjectID)
+	if err != nil || project.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
 	}
 
 	// Query logs from Loki

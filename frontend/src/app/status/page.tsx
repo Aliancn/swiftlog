@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useStatistics, useRecentRuns } from '@/lib/hooks';
+import { api } from '@/lib/api';
 import { RunStatus, AIStatus } from '@/types';
 import Link from 'next/link';
 
@@ -18,6 +19,22 @@ export default function StatusPage() {
 
     return () => clearInterval(interval);
   }, [refreshStats, refreshRuns]);
+
+  const handleArchiveCompleted = async () => {
+    if (!confirm('Archive all completed/failed/aborted runs? They will be hidden from this view but not deleted.')) {
+      return;
+    }
+
+    try {
+      const response = await api.archiveCompletedRuns();
+      alert(`${response.archived_count} run(s) archived successfully`);
+      // Refresh data to reflect changes
+      refreshStats();
+      refreshRuns();
+    } catch (err) {
+      alert(`Failed to archive runs: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
 
   if (statsLoading || runsLoading) {
     return (
@@ -115,8 +132,14 @@ export default function StatusPage() {
 
         {/* Recent Runs Table */}
         <div className="bg-white rounded-lg shadow border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">Recent Runs</h2>
+            <button
+              onClick={handleArchiveCompleted}
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded transition-colors"
+            >
+              Clear Completed
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -143,39 +166,44 @@ export default function StatusPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {recentRuns?.data.map((run) => (
-                  <tr key={run.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">
-                      {run.id.slice(0, 8)}...
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {new Date(run.start_time).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={run.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {run.exit_code !== null && run.exit_code !== undefined ? run.exit_code : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <AIStatusBadge status={run.ai_status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <Link
-                        href={`/runs/${run.id}`}
-                        className="text-blue-600 hover:text-blue-700 transition-colors"
-                      >
-                        View Details →
-                      </Link>
+                {recentRuns?.data && recentRuns.data.length > 0 ? (
+                  recentRuns.data.map((run) => (
+                    <tr key={run.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">
+                        {run.id.slice(0, 8)}...
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {new Date(run.start_time).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={run.status} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {run.exit_code !== null && run.exit_code !== undefined ? run.exit_code : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <AIStatusBadge status={run.ai_status} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link
+                          href={`/runs/${run.id}`}
+                          className="text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          View Details →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                      No recent runs found. Start uploading logs using the CLI to see them here.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-          {recentRuns?.data.length === 0 && (
-            <div className="p-8 text-center text-gray-500">No recent runs found</div>
-          )}
         </div>
       </div>
     </div>
