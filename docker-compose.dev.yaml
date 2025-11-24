@@ -1,0 +1,44 @@
+# SwiftLog Development Docker Compose Override
+# This file exposes additional ports for local development and debugging
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+#
+# This will:
+# - Keep nginx as the main entry point on port 80
+# - Additionally expose API on port 8080
+# - Additionally expose WebSocket on port 8081
+# - Additionally expose Frontend on port 3000
+# - Additionally expose PostgreSQL on port 5432 (for database tools)
+# - Additionally expose Loki on port 3100 (for direct log queries)
+# - Additionally expose Redis on port 6379 (for debugging)
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  loki:
+    ports:
+      - "3100:3100"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    ports:
+      - "8080:8080"
+
+  websocket:
+    ports:
+      - "8081:8081"
+
+  frontend:
+    build:
+      args:
+        # Direct URLs for development (bypassing nginx)
+        NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
+        NEXT_PUBLIC_WS_URL: ws://localhost:8081
+    ports:
+      - "3000:3000"

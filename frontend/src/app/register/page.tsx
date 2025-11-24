@@ -214,7 +214,7 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
               <p className="mt-1 text-xs text-gray-500">
-                At least 6 characters
+                At least 8 characters
               </p>
             </div>
             <div>
