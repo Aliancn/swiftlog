@@ -9,12 +9,12 @@ CREATE TABLE IF NOT EXISTS log_runs (
     status VARCHAR(50) NOT NULL DEFAULT 'running',
     exit_code INTEGER,
     ai_report TEXT,
-    ai_status VARCHAR(50) DEFAULT 'pending',
+    ai_status VARCHAR(50) DEFAULT 'none',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT status_valid CHECK (status IN ('running', 'completed', 'failed', 'aborted')),
     CONSTRAINT exit_code_range CHECK (exit_code IS NULL OR (exit_code >= -128 AND exit_code <= 255)),
-    CONSTRAINT ai_status_valid CHECK (ai_status IN ('pending', 'processing', 'completed', 'failed')),
+    CONSTRAINT ai_status_valid CHECK (ai_status IN ('none', 'pending', 'processing', 'completed', 'failed')),
     CONSTRAINT end_time_after_start CHECK (end_time IS NULL OR end_time >= start_time)
 );
 
@@ -38,7 +38,7 @@ COMMENT ON COLUMN log_runs.end_time IS 'Script execution end timestamp (null if 
 COMMENT ON COLUMN log_runs.status IS 'Execution status: running, completed, failed, aborted';
 COMMENT ON COLUMN log_runs.exit_code IS 'Script exit code (-128 to 255, null if not finished)';
 COMMENT ON COLUMN log_runs.ai_report IS 'AI-generated analysis report (null if not generated)';
-COMMENT ON COLUMN log_runs.ai_status IS 'AI report generation status: pending, processing, completed, failed';
+COMMENT ON COLUMN log_runs.ai_status IS 'AI report generation status: none (disabled), pending, processing, completed, failed';
 
 -- Trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

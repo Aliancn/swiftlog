@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useGroup, useGroupRuns, useProject } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { RunStatus } from '@/types';
+import AIStatusBadge from '@/components/AIStatusBadge';
 
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -265,14 +266,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {duration !== null ? `${duration}s` : 'Running...'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {run.ai_status === 'completed' ? (
-                          <span className="text-green-600">Available</span>
-                        ) : run.ai_status === 'processing' ? (
-                          <span className="text-blue-600">Processing...</span>
-                        ) : (
-                          <span className="text-gray-400">Pending</span>
-                        )}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <AIStatusBadge status={run.ai_status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end space-x-3">
