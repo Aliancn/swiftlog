@@ -66,11 +66,18 @@ jobs:
           cat > deploy/update.sh << 'EOF'
           #!/bin/bash
           set -e
+          echo "Pulling latest images..."
           docker compose pull
+          echo "Stopping services..."
           docker compose down
+          echo "Starting services..."
           docker compose up -d --remove-orphans
-          sleep 20
+          echo "Waiting for services to be healthy..."
+          sleep 30
+          echo "Service status:"
           docker compose ps
+          echo "Checking container logs for errors..."
+          docker compose logs --tail=50
           EOF
 
           chmod +x deploy/*.sh
@@ -84,11 +91,17 @@ jobs:
           sed -i 's/^      context:/      #context:/' docker-compose.yaml
           sed -i 's/^      dockerfile:/      #dockerfile:/' docker-compose.yaml
           sed -i 's/^      target:/      #target:/' docker-compose.yaml
+          sed -i 's/^      args:$/      #args:/' docker-compose.yaml
+          sed -i 's/^        NEXT_PUBLIC/#        NEXT_PUBLIC/' docker-compose.yaml
+          # Add image lines for each service
           sed -i '/container_name: swiftlog_ingestor/a\    image: ghcr.io/${{ github.repository }}/ingestor:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_api/a\    image: ghcr.io/${{ github.repository }}/api:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_websocket/a\    image: ghcr.io/${{ github.repository }}/websocket:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_ai_worker/a\    image: ghcr.io/${{ github.repository }}/ai-worker:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_frontend/a\    image: ghcr.io/${{ github.repository }}/frontend:'"${VERSION}" docker-compose.yaml
+          # Verify the changes
+          echo "Modified docker-compose.yaml:"
+          grep -A 2 "image: ghcr.io" docker-compose.yaml || true
 
       - uses: appleboy/scp-action@v0.1.7
         with:
@@ -98,7 +111,8 @@ jobs:
           source: "deploy"
           target: "/tmp/"
 
-      - uses: appleboy/ssh-action@v1.0.3
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
         env:
           PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
           NGINX_PORT: ${{ secrets.NGINX_PORT || '80' }}
@@ -118,29 +132,101 @@ jobs:
           script: |
             set -e
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
+
+            echo "=== Deployment started at $(date) ==="
+
+            # Prepare deployment directory
             sudo mkdir -p $DEPLOY_DIR
+
+            # Backup current .env if exists
             [ -f $DEPLOY_DIR/.env ] && sudo cp $DEPLOY_DIR/.env /tmp/.env.backup
+
+            # Copy new files
             sudo cp -r /tmp/deploy/* $DEPLOY_DIR/
+
+            # Restore .env or use new one
             [ -f /tmp/.env.backup ] && sudo cp /tmp/.env.backup $DEPLOY_DIR/.env || sudo cp /tmp/deploy/.env $DEPLOY_DIR/.env
+
+            # Set ownership
             sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} $DEPLOY_DIR
+
             cd $DEPLOY_DIR
+
+            # Update environment variables
             export PUBLIC_URL NGINX_PORT POSTGRES_PASSWORD JWT_SECRET ENCRYPTION_KEY ADMIN_USERNAME ADMIN_PASSWORD ENVIRONMENT LOG_LEVEL CORS_ORIGINS
             ./update-env.sh .env
-            [ -z "$POSTGRES_PASSWORD" ] && exit 1
-            [ -z "$JWT_SECRET" ] && exit 1
-            [ -z "$ENCRYPTION_KEY" ] && exit 1
+
+            # Validate required secrets
+            echo "Validating required environment variables..."
+            [ -z "$POSTGRES_PASSWORD" ] && echo "ERROR: POSTGRES_PASSWORD is required" && exit 1
+            [ -z "$JWT_SECRET" ] && echo "ERROR: JWT_SECRET is required" && exit 1
+            [ -z "$ENCRYPTION_KEY" ] && echo "ERROR: ENCRYPTION_KEY is required" && exit 1
+
+            # Set CORS_ORIGINS to PUBLIC_URL if not set
             [ -z "$CORS_ORIGINS" ] && [ -n "$PUBLIC_URL" ] && export CORS_ORIGINS="$PUBLIC_URL" && ./update-env.sh .env
+
+            # Login to GitHub Container Registry
+            echo "Logging in to GitHub Container Registry..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            ./update.sh ${{ steps.version.outputs.version }}
+
+            # Run update script
+            echo "Running update script..."
+            ./update.sh
+
+            # Logout from registry
             docker logout ghcr.io
+
+            # Cleanup
             rm -rf /tmp/deploy /tmp/.env.backup
 
-      - uses: appleboy/ssh-action@v1.0.3
+            echo "=== Deployment completed at $(date) ==="
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}
+
+            echo "=== Running health checks ==="
+
+            # Get nginx port from .env
             NGINX_PORT=$(grep -E '^NGINX_PORT=' .env | cut -d'=' -f2 || echo "80")
-            curl -f http://localhost:${NGINX_PORT}/health || exit 1
+
+            # Wait for services to be fully ready
+            echo "Waiting 10 seconds for services to stabilize..."
+            sleep 10
+
+            # Check docker containers
+            echo "Checking container status..."
+            docker compose ps
+
+            # Check for unhealthy containers
+            UNHEALTHY=$(docker compose ps --format json | jq -r 'select(.Health != "healthy" and .Health != "") | .Name' 2>/dev/null || true)
+            if [ -n "$UNHEALTHY" ]; then
+              echo "WARNING: Unhealthy containers detected: $UNHEALTHY"
+            fi
+
+            # Test nginx endpoint
+            echo "Testing nginx health endpoint..."
+            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/health | grep -q "200"; then
+              echo "ERROR: Nginx health check failed"
+              docker compose logs nginx
+              exit 1
+            fi
+            echo "✓ Nginx is healthy"
+
+            # Test API endpoint
+            echo "Testing API health endpoint..."
+            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/api/v1/health | grep -q "200"; then
+              echo "ERROR: API health check failed"
+              docker compose logs api
+              exit 1
+            fi
+            echo "✓ API is healthy"
+
+            echo "=== Health checks passed ==="
+            echo "Deployment successful!"
+
