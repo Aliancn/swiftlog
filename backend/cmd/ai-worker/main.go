@@ -25,6 +25,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Validate environment configuration
+	log.Println("Validating environment configuration...")
+	if err := config.ValidateConfig(); err != nil {
+		log.Printf("Configuration validation warnings/errors:\n%v", err)
+		environment := config.GetEnv("ENVIRONMENT", "development")
+		if environment == "production" {
+			log.Fatalf("Configuration validation failed in production mode. Please fix the errors above.")
+		}
+	}
+
 	// Load configuration from environment
 	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
 	lokiURL := config.GetEnv("LOKI_URL", "http://localhost:3100")
