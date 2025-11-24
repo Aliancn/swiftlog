@@ -117,3 +117,29 @@ export interface EffectiveSettings {
   ai_max_concurrent: number;
   source: 'user' | 'project' | 'merged';
 }
+
+export interface User {
+  id: string;
+  username: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface Token {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used?: string;
+}
+
+export interface TokenResponse {
+  token: string;
+  token_info: Token;
+}

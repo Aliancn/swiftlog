@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useProjects } from '@/lib/hooks';
 import { api } from '@/lib/api';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { data: projects, error, isLoading, mutate } = useProjects();
   const [editingProject, setEditingProject] = useState<{ id: string; name: string } | null>(null);
   const [deletingProject, setDeletingProject] = useState<{ id: string; name: string } | null>(null);

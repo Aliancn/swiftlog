@@ -19,10 +19,6 @@ export default function TokensPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenValue, setNewTokenValue] = useState("");
 
-  useEffect(() => {
-    loadTokens();
-  }, []);
-
   const loadTokens = async () => {
     try {
       const response = await api.listTokens();
@@ -37,6 +33,11 @@ export default function TokensPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    void loadTokens();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +115,7 @@ export default function TokensPage() {
           <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
             <h3 className="text-sm font-medium text-green-900 mb-2">Token created successfully!</h3>
             <p className="text-xs text-green-700 mb-2">
-              Make sure to copy your token now. You won't be able to see it again!
+              Make sure to copy your token now. You won&apos;t be able to see it again!
             </p>
             <div className="flex items-center space-x-2">
               <code className="flex-1 bg-white p-2 rounded border border-green-300 text-sm font-mono overflow-x-auto">

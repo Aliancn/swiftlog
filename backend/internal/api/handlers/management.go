@@ -10,9 +10,9 @@ import (
 
 // ManagementHandler handles management-related API requests
 type ManagementHandler struct {
-	projectRepo  *repository.ProjectRepository
-	groupRepo    *repository.LogGroupRepository
-	logRunRepo   *repository.LogRunRepository
+	projectRepo *repository.ProjectRepository
+	groupRepo   *repository.LogGroupRepository
+	logRunRepo  *repository.LogRunRepository
 }
 
 // NewManagementHandler creates a new management handler
@@ -22,9 +22,9 @@ func NewManagementHandler(
 	logRunRepo *repository.LogRunRepository,
 ) *ManagementHandler {
 	return &ManagementHandler{
-		projectRepo:  projectRepo,
-		groupRepo:    groupRepo,
-		logRunRepo:   logRunRepo,
+		projectRepo: projectRepo,
+		groupRepo:   groupRepo,
+		logRunRepo:  logRunRepo,
 	}
 }
 

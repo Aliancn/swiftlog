@@ -20,9 +20,9 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunU
   const reconnectAttempts = useRef(0);
 
   useEffect(() => {
-    // Only connect if the run is still running
     if (!isRunning) {
-      setConnectionStatus('disconnected');
+      // Using queueMicrotask to defer setState and avoid synchronous state update in effect
+      queueMicrotask(() => setConnectionStatus('disconnected'));
       return;
     }
 
@@ -127,7 +127,7 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunU
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [runId, isRunning]);
+  }, [runId, isRunning, onRunUpdate]);
 
   const getStatusIndicator = () => {
     switch (connectionStatus) {

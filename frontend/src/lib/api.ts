@@ -1,5 +1,5 @@
 // SwiftLog API Client
-import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse, UserSettings, ProjectSettings, EffectiveSettings, TruncateStrategy } from '@/types';
+import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse, UserSettings, ProjectSettings, EffectiveSettings, TruncateStrategy, AuthResponse, User, Token, TokenResponse } from '@/types';
 import { getApiBaseUrl } from './url';
 
 const API_BASE_URL = getApiBaseUrl();
@@ -94,8 +94,8 @@ class APIClient {
   }
 
   // Auth methods
-  async login(username: string, password: string): Promise<{ token: string; user: any }> {
-    const response = await this.request<{ token: string; user: any }>('/auth/login', {
+  async login(username: string, password: string): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
@@ -103,8 +103,8 @@ class APIClient {
     return response;
   }
 
-  async register(username: string, password: string): Promise<{ token: string; user: any }> {
-    const response = await this.request<{ token: string; user: any }>('/auth/register', {
+  async register(username: string, password: string): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
@@ -118,15 +118,15 @@ class APIClient {
     return response.json();
   }
 
-  async getCurrentUser(): Promise<any> {
+  async getCurrentUser(): Promise<User> {
     return this.request('/auth/me');
   }
 
-  async listTokens(): Promise<{ tokens: any[] }> {
+  async listTokens(): Promise<{ tokens: Token[] }> {
     return this.request('/auth/tokens');
   }
 
-  async createToken(name: string): Promise<{ token: string; token_info: any }> {
+  async createToken(name: string): Promise<TokenResponse> {
     return this.request('/auth/tokens', {
       method: 'POST',
       body: JSON.stringify({ name }),
@@ -138,7 +138,7 @@ class APIClient {
   }
 
   // Admin - User Management
-  async adminListUsers(): Promise<{ users: any[] }> {
+  async adminListUsers(): Promise<{ users: User[] }> {
     return this.request('/admin/users');
   }
 
@@ -170,15 +170,33 @@ class APIClient {
   }
 
   // Admin - System Configuration
-  async adminListConfig(): Promise<{ configs: any[] }> {
+  async adminListConfig(): Promise<{ configs: Array<{
+    id: string;
+    key: string;
+    value: string;
+    description?: string;
+    updated_at: string;
+  }> }> {
     return this.request('/admin/config');
   }
 
-  async adminGetConfig(key: string): Promise<any> {
+  async adminGetConfig(key: string): Promise<{
+    id: string;
+    key: string;
+    value: string;
+    description?: string;
+    updated_at: string;
+  }> {
     return this.request(`/admin/config/${key}`);
   }
 
-  async adminUpdateConfig(key: string, value: string): Promise<any> {
+  async adminUpdateConfig(key: string, value: string): Promise<{
+    id: string;
+    key: string;
+    value: string;
+    description?: string;
+    updated_at: string;
+  }> {
     return this.request(`/admin/config/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
@@ -189,7 +207,12 @@ class APIClient {
     return this.request(`/admin/config/${key}`, { method: 'DELETE' });
   }
 
-  async adminGetStats(): Promise<any> {
+  async adminGetStats(): Promise<{
+    total_users: number;
+    active_users: number;
+    total_runs: number;
+    total_projects: number;
+  }> {
     return this.request('/admin/stats');
   }
 

@@ -10,13 +10,13 @@ import (
 
 // User represents an authenticated user of the platform
 type User struct {
-	ID           uuid.UUID     `json:"id" db:"id"`
-	Username     string        `json:"username" db:"username"`
-	PasswordHash string        `json:"-" db:"password_hash"` // Never expose in JSON
-	IsAdmin      bool          `json:"is_admin" db:"is_admin"`
-	IsActive     bool          `json:"is_active" db:"is_active"`
-	LastLogin    sql.NullTime  `json:"-" db:"last_login"`
-	CreatedAt    time.Time     `json:"created_at" db:"created_at"`
+	ID           uuid.UUID    `json:"id" db:"id"`
+	Username     string       `json:"username" db:"username"`
+	PasswordHash string       `json:"-" db:"password_hash"` // Never expose in JSON
+	IsAdmin      bool         `json:"is_admin" db:"is_admin"`
+	IsActive     bool         `json:"is_active" db:"is_active"`
+	LastLogin    sql.NullTime `json:"-" db:"last_login"`
+	CreatedAt    time.Time    `json:"created_at" db:"created_at"`
 }
 
 // MarshalJSON implements custom JSON serialization for User
@@ -33,12 +33,12 @@ func (u User) MarshalJSON() ([]byte, error) {
 
 // SystemConfig represents a system-wide configuration setting
 type SystemConfig struct {
-	ID          uuid.UUID     `json:"id" db:"id"`
-	Key         string        `json:"key" db:"key"`
-	Value       string        `json:"value" db:"value"`
+	ID          uuid.UUID      `json:"id" db:"id"`
+	Key         string         `json:"key" db:"key"`
+	Value       string         `json:"value" db:"value"`
 	Description sql.NullString `json:"-" db:"description"`
-	UpdatedAt   time.Time     `json:"updated_at" db:"updated_at"`
-	UpdatedBy   uuid.NullUUID `json:"-" db:"updated_by"`
+	UpdatedAt   time.Time      `json:"updated_at" db:"updated_at"`
+	UpdatedBy   uuid.NullUUID  `json:"-" db:"updated_by"`
 }
 
 // MarshalJSON implements custom JSON serialization for SystemConfig
@@ -94,7 +94,7 @@ const (
 type AIStatus string
 
 const (
-	AIStatusNone       AIStatus = "none"       // AI analysis is disabled
+	AIStatusNone       AIStatus = "none" // AI analysis is disabled
 	AIStatusPending    AIStatus = "pending"
 	AIStatusProcessing AIStatus = "processing"
 	AIStatusCompleted  AIStatus = "completed"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -11,11 +11,7 @@ export default function Navigation() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
 
-  useEffect(() => {
-    checkAuth();
-  }, [pathname]);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('swiftlog_token') : null;
     if (!token) {
       setIsLoggedIn(false);
@@ -30,7 +26,13 @@ export default function Navigation() {
       setIsLoggedIn(false);
       setUsername('');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // We intentionally call checkAuth in an effect to verify auth when pathname changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void checkAuth();
+  }, [pathname, checkAuth]);
 
   const handleLogout = () => {
     api.logout();

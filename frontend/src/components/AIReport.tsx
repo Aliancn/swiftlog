@@ -172,14 +172,14 @@ export default function AIReport({ runId, report, status, onReportGenerated }: A
         <div className="prose prose-sm max-w-none text-gray-700">
           <ReactMarkdown
             components={{
-              h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
-              h2: ({ node, ...props }) => <h2 className="text-xl font-bold mt-5 mb-3" {...props} />,
-              h3: ({ node, ...props }) => <h3 className="text-lg font-semibold mt-4 mb-2" {...props} />,
-              p: ({ node, ...props }) => <p className="mb-3 leading-relaxed" {...props} />,
-              ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
-              ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
-              li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-              pre: ({ node, children, ...props }: any) => {
+              h1: ({ ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
+              h2: ({ ...props }) => <h2 className="text-xl font-bold mt-5 mb-3" {...props} />,
+              h3: ({ ...props }) => <h3 className="text-lg font-semibold mt-4 mb-2" {...props} />,
+              p: ({ ...props }) => <p className="mb-3 leading-relaxed" {...props} />,
+              ul: ({ ...props }) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
+              ol: ({ ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
+              li: ({ ...props }) => <li className="ml-4" {...props} />,
+              pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) => {
                 // Pre tag for code blocks
                 return (
                   <pre className="bg-gray-100 p-3 rounded my-2 overflow-x-auto" {...props}>
@@ -187,29 +187,17 @@ export default function AIReport({ runId, report, status, onReportGenerated }: A
                   </pre>
                 );
               },
-              code: ({ node, className, children, ...props }: any) => {
-                // Check if this code element is inside a pre tag by checking node parent
-                const isInPre = node?.parent?.tagName === 'pre';
-
-                if (isInPre) {
-                  // Code block inside pre - minimal styling
-                  return (
-                    <code className="text-sm font-mono text-gray-800" {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-
-                // Inline code - add background and padding
+              code: ({ children, ...props }: React.HTMLAttributes<HTMLElement>) => {
+                // Inline code - always use inline styling
                 return (
                   <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...props}>
                     {children}
                   </code>
                 );
               },
-              strong: ({ node, ...props }) => <strong className="font-bold text-gray-900" {...props} />,
-              em: ({ node, ...props }) => <em className="italic" {...props} />,
-              a: ({ node, ...props }) => <a className="text-blue-600 hover:underline" {...props} />,
+              strong: ({ ...props }) => <strong className="font-bold text-gray-900" {...props} />,
+              em: ({ ...props }) => <em className="italic" {...props} />,
+              a: ({ ...props }) => <a className="text-blue-600 hover:underline" {...props} />,
             }}
           >
             {report}

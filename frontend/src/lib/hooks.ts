@@ -50,6 +50,7 @@ function useData<T>(key: string | null, fetcher: () => Promise<T>): UseDataResul
         cancelled = true;
       };
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [key]
   );
 

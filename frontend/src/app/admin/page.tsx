@@ -23,6 +23,13 @@ interface Config {
   updated_at: string;
 }
 
+interface UserStats {
+  total: number;
+  active: number;
+  inactive: number;
+  admins: number;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -31,15 +38,28 @@ export default function AdminPage() {
 
   // User management state
   const [users, setUsers] = useState<User[]>([]);
-  const [userStats, setUserStats] = useState<any>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
 
   // Config management state
   const [configs, setConfigs] = useState<Config[]>([]);
   const [editingConfig, setEditingConfig] = useState<string | null>(null);
   const [configValue, setConfigValue] = useState('');
 
+  const checkAdmin = async () => {
+    try {
+      const user = await api.getCurrentUser();
+      if (!user.is_admin) {
+        router.push('/dashboard');
+        return;
+      }
+    } catch {
+      router.push('/login');
+    }
+  };
+
   useEffect(() => {
-    checkAdmin();
+    void checkAdmin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -49,18 +69,6 @@ export default function AdminPage() {
       loadConfigs();
     }
   }, [activeTab]);
-
-  const checkAdmin = async () => {
-    try {
-      const user = await api.getCurrentUser();
-      if (!user.is_admin) {
-        router.push('/dashboard');
-        return;
-      }
-    } catch (err) {
-      router.push('/login');
-    }
-  };
 
   const loadUsers = async () => {
     try {

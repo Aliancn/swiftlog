@@ -40,18 +40,18 @@ func AdminMiddleware(userRepo *repository.UserRepository) gin.HandlerFunc {
 		// This is a security vs performance trade-off
 		// Uncomment if you need real-time admin status verification:
 		/*
-		user, err := userRepo.GetByID(c.Request.Context(), userID.(uuid.UUID))
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
-			c.Abort()
-			return
-		}
-		if !user.IsAdmin || !user.IsActive {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges revoked"})
-			c.Abort()
-			return
-		}
-		c.Set("user", user)
+			user, err := userRepo.GetByID(c.Request.Context(), userID.(uuid.UUID))
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+				c.Abort()
+				return
+			}
+			if !user.IsAdmin || !user.IsActive {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges revoked"})
+				c.Abort()
+				return
+			}
+			c.Set("user", user)
 		*/
 
 		c.Next()

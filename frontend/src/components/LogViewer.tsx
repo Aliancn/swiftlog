@@ -41,7 +41,7 @@ export default function LogViewer({ logs, isLive = false }: LogViewerProps) {
 
   const formatLogContent = (content: string) => {
     // Remove [stdout] or [stderr] prefix if present at the start
-    let cleaned = content.replace(/^\[(stdout|stderr|STDOUT|STDERR)\]\s*/, '');
+    const cleaned = content.replace(/^\[(stdout|stderr|STDOUT|STDERR)\]\s*/, '');
 
     // If the line is now empty or only whitespace, return a single space to preserve the line
     if (!cleaned.trim()) {

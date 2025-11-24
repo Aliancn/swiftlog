@@ -13,14 +13,14 @@ import (
 
 // SettingsRepository handles database operations for settings
 type SettingsRepository struct {
-	db               *sql.DB
+	db                *sql.DB
 	encryptionService *crypto.EncryptionService
 }
 
 // NewSettingsRepository creates a new settings repository
 func NewSettingsRepository(db *sql.DB, encryptionService *crypto.EncryptionService) *SettingsRepository {
 	return &SettingsRepository{
-		db:               db,
+		db:                db,
 		encryptionService: encryptionService,
 	}
 }

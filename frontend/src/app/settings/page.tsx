@@ -63,8 +63,12 @@ export default function SettingsPage() {
       setApiKeyChanged(false);
       await mutate();
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to save settings');
+    } catch (error) {
+      if (error instanceof Error) {
+        setSaveError(error.message || 'Failed to save settings');
+      } else {
+        setSaveError('Failed to save settings');
+      }
     } finally {
       setIsSaving(false);
     }

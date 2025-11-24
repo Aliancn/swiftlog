@@ -174,9 +174,9 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
-		"is_admin": user.IsAdmin,
+		"id":         user.ID,
+		"username":   user.Username,
+		"is_admin":   user.IsAdmin,
 		"created_at": user.CreatedAt,
 	})
 }
@@ -216,7 +216,7 @@ func (h *AuthHandler) CreateToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"token": rawToken,
+		"token":      rawToken,
 		"token_info": apiToken,
 	})
 }

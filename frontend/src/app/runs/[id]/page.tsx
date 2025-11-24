@@ -1,19 +1,17 @@
 'use client';
 
-import { use, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import { use } from 'react';
 import { useRun, useRunLogs } from '@/lib/hooks';
 import LogViewer from '@/components/LogViewer';
 import RealtimeLog from '@/components/RealtimeLog';
 import RunStatusSubscriber from '@/components/RunStatusSubscriber';
 import AIReport from '@/components/AIReport';
-import { RunStatus, AIStatus } from '@/types';
+import { RunStatus } from '@/types';
 
 export default function RunDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: run, error: runError, isLoading: runLoading, mutate: refreshRun } = useRun(id);
   const { data: logs, error: logsError, isLoading: logsLoading, mutate: refreshLogs } = useRunLogs(id);
-  const previousStatusRef = useRef<RunStatus | null>(null);
 
   const isLoading = runLoading || logsLoading;
   const error = runError || logsError;
