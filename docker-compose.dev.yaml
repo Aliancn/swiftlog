@@ -3,15 +3,6 @@
 #
 # Usage:
 #   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
-#
-# This will:
-# - Keep nginx as the main entry point on port 80
-# - Additionally expose API on port 8080
-# - Additionally expose WebSocket on port 8081
-# - Additionally expose Frontend on port 3000
-# - Additionally expose PostgreSQL on port 5432 (for database tools)
-# - Additionally expose Loki on port 3100 (for direct log queries)
-# - Additionally expose Redis on port 6379 (for debugging)
 
 services:
   postgres:

@@ -34,7 +34,8 @@ export default function AIReport({ runId, report, status, onReportGenerated }: A
     }
   };
 
-  if (status === AIStatus.Pending && !report) {
+  // Show generate button for both None (no auto-analyze) and Pending (queued but no report yet)
+  if ((status === AIStatus.None || status === AIStatus.Pending) && !report) {
     return (
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex items-center justify-between">

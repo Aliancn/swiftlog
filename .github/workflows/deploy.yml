@@ -1,32 +1,25 @@
-name: Deploy to Server
+name: Deploy
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
         type: choice
-        options:
-          - production
-          - staging
+        options: [production, staging]
+        default: production
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   deploy:
-    name: Deploy to ${{ inputs.environment || 'production' }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'production' }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set version
         id: version
@@ -37,168 +30,115 @@ jobs:
             echo "version=latest" >> $GITHUB_OUTPUT
           fi
 
-      - name: Prepare deployment files
+      - name: Prepare deployment
         run: |
-          mkdir -p deploy
+          mkdir -p deploy/nginx
           cp docker-compose.yaml deploy/
           cp loki-config.yaml deploy/
           cp .env.example deploy/.env
-          cp scripts/update-env.sh deploy/
-          chmod +x deploy/update-env.sh
+          cp nginx/nginx.conf deploy/nginx/
 
-          # Create deployment script
+          cat > deploy/update-env.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          ENV_FILE="${1:-.env}"
+          update_env() {
+            [ -z "$2" ] && return
+            if grep -q "^$1=" "$ENV_FILE"; then
+              sed -i.bak "s|^$1=.*|$1=$2|" "$ENV_FILE"
+            else
+              echo "$1=$2" >> "$ENV_FILE"
+            fi
+          }
+          [ -n "$PUBLIC_URL" ] && update_env "PUBLIC_URL" "$PUBLIC_URL"
+          [ -n "$NGINX_PORT" ] && update_env "NGINX_PORT" "$NGINX_PORT"
+          [ -n "$POSTGRES_PASSWORD" ] && update_env "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD"
+          [ -n "$JWT_SECRET" ] && update_env "JWT_SECRET" "$JWT_SECRET"
+          [ -n "$ENCRYPTION_KEY" ] && update_env "ENCRYPTION_KEY" "$ENCRYPTION_KEY"
+          [ -n "$ADMIN_USERNAME" ] && update_env "ADMIN_USERNAME" "$ADMIN_USERNAME"
+          [ -n "$ADMIN_PASSWORD" ] && update_env "ADMIN_PASSWORD" "$ADMIN_PASSWORD"
+          [ -n "$ENVIRONMENT" ] && update_env "ENVIRONMENT" "$ENVIRONMENT"
+          [ -n "$LOG_LEVEL" ] && update_env "LOG_LEVEL" "$LOG_LEVEL"
+          [ -n "$CORS_ORIGINS" ] && update_env "CORS_ORIGINS" "$CORS_ORIGINS"
+          rm -f "${ENV_FILE}.bak"
+          EOF
+
           cat > deploy/update.sh << 'EOF'
           #!/bin/bash
           set -e
-
-          VERSION=$1
-          if [ -z "$VERSION" ]; then
-            VERSION="latest"
-          fi
-
-          echo "🚀 Deploying SwiftLog ${VERSION}..."
-
-          # Pull latest images
           docker compose pull
-
-          # Restart services
+          docker compose down
           docker compose up -d --remove-orphans
-
-          # Wait for services to be healthy
-          echo "⏳ Waiting for services to be healthy..."
-          sleep 15
-
-          # Check service status
+          sleep 20
           docker compose ps
-
-          echo "✅ Deployment complete!"
-          echo ""
-          echo "📊 Service endpoints:"
-          echo "   Frontend:  http://$(hostname -I | awk '{print $1}'):3000"
-          echo "   API:       http://$(hostname -I | awk '{print $1}'):8080"
-          echo "   WebSocket: ws://$(hostname -I | awk '{print $1}'):8081"
-          echo "   gRPC:      $(hostname -I | awk '{print $1}'):50051"
           EOF
 
-          chmod +x deploy/update.sh
+          chmod +x deploy/*.sh
 
-      - name: Update docker-compose to use version
+      - name: Update docker-compose
         run: |
+          cd deploy
           VERSION=${{ steps.version.outputs.version }}
-          sed -i "s|build:|#build:|g" deploy/docker-compose.yaml
-          sed -i "s|context:|#context:|g" deploy/docker-compose.yaml
-          sed -i "s|dockerfile:|#dockerfile:|g" deploy/docker-compose.yaml
+          sed -i 's/^    build:$/    #build:/' docker-compose.yaml
+          sed -i 's/^      context:/      #context:/' docker-compose.yaml
+          sed -i 's/^      dockerfile:/      #dockerfile:/' docker-compose.yaml
+          sed -i '/container_name: swiftlog_ingestor/a\    image: ghcr.io/${{ github.repository }}/ingestor:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_api/a\    image: ghcr.io/${{ github.repository }}/api:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_websocket/a\    image: ghcr.io/${{ github.repository }}/websocket:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_ai_worker/a\    image: ghcr.io/${{ github.repository }}/ai-worker:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_frontend/a\    image: ghcr.io/${{ github.repository }}/frontend:'"${VERSION}" docker-compose.yaml
 
-          # Add image references
-          sed -i "/ingestor:/a\    image: ghcr.io/${{ github.repository }}/ingestor:${VERSION}" deploy/docker-compose.yaml
-          sed -i "/api:/a\    image: ghcr.io/${{ github.repository }}/api:${VERSION}" deploy/docker-compose.yaml
-          sed -i "/websocket:/a\    image: ghcr.io/${{ github.repository }}/websocket:${VERSION}" deploy/docker-compose.yaml
-          sed -i "/ai-worker:/a\    image: ghcr.io/${{ github.repository }}/ai-worker:${VERSION}" deploy/docker-compose.yaml
-          sed -i "/frontend:/a\    image: ghcr.io/${{ github.repository }}/frontend:${VERSION}" deploy/docker-compose.yaml
-
-      - name: Create deployment package
-        run: |
-          tar czf deploy.tar.gz deploy/
-
-      - name: Copy files to server
-        uses: appleboy/scp-action@v0.1.7
+      - uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "deploy.tar.gz"
+          source: "deploy"
           target: "/tmp/"
 
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: appleboy/ssh-action@v1.0.3
         env:
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+          NGINX_PORT: ${{ secrets.NGINX_PORT || '80' }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME || 'admin' }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ENVIRONMENT: ${{ secrets.ENVIRONMENT || 'production' }}
+          ENVIRONMENT: production
           LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: POSTGRES_PASSWORD,JWT_SECRET,ADMIN_PASSWORD,ENVIRONMENT,LOG_LEVEL
+          envs: PUBLIC_URL,NGINX_PORT,POSTGRES_PASSWORD,JWT_SECRET,ENCRYPTION_KEY,ADMIN_USERNAME,ADMIN_PASSWORD,ENVIRONMENT,LOG_LEVEL,CORS_ORIGINS
           script: |
             set -e
-
-            # Extract deployment package
-            cd /tmp
-            tar xzf deploy.tar.gz
-
-            # Create deployment directory if not exists
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
             sudo mkdir -p $DEPLOY_DIR
-
-            # Backup current .env if exists
-            if [ -f $DEPLOY_DIR/.env ]; then
-              sudo cp $DEPLOY_DIR/.env /tmp/.env.backup
-            fi
-
-            # Copy new files
-            sudo cp -r deploy/* $DEPLOY_DIR/
-
-            # Restore .env or create from example
-            if [ -f /tmp/.env.backup ]; then
-              sudo cp /tmp/.env.backup $DEPLOY_DIR/.env
-            else
-              sudo cp deploy/.env $DEPLOY_DIR/.env
-            fi
-
-            # Set permissions
+            [ -f $DEPLOY_DIR/.env ] && sudo cp $DEPLOY_DIR/.env /tmp/.env.backup
+            sudo cp -r /tmp/deploy/* $DEPLOY_DIR/
+            [ -f /tmp/.env.backup ] && sudo cp /tmp/.env.backup $DEPLOY_DIR/.env || sudo cp /tmp/deploy/.env $DEPLOY_DIR/.env
             sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} $DEPLOY_DIR
-
-            # Update environment variables from secrets
             cd $DEPLOY_DIR
-            echo "🔧 Updating environment variables..."
-            export POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
-            export JWT_SECRET="${JWT_SECRET}"
-            export ADMIN_PASSWORD="${ADMIN_PASSWORD}"
-            export ENVIRONMENT="${ENVIRONMENT}"
-            export LOG_LEVEL="${LOG_LEVEL}"
+            export PUBLIC_URL NGINX_PORT POSTGRES_PASSWORD JWT_SECRET ENCRYPTION_KEY ADMIN_USERNAME ADMIN_PASSWORD ENVIRONMENT LOG_LEVEL CORS_ORIGINS
             ./update-env.sh .env
-
-            # Run deployment
+            [ -z "$POSTGRES_PASSWORD" ] && exit 1
+            [ -z "$JWT_SECRET" ] && exit 1
+            [ -z "$ENCRYPTION_KEY" ] && exit 1
+            [ -z "$CORS_ORIGINS" ] && [ -n "$PUBLIC_URL" ] && export CORS_ORIGINS="$PUBLIC_URL" && ./update-env.sh .env
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             ./update.sh ${{ steps.version.outputs.version }}
+            docker logout ghcr.io
+            rm -rf /tmp/deploy /tmp/.env.backup
 
-            # Cleanup
-            rm -rf /tmp/deploy /tmp/deploy.tar.gz /tmp/.env.backup
-
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
-            cd $DEPLOY_DIR
-
-            echo "📊 Service Status:"
-            docker compose ps
-
-            echo ""
-            echo "🔍 Health Check:"
-
-            # Check API health
-            if curl -f http://localhost:8080/health 2>/dev/null; then
-              echo "✅ API is healthy"
-            else
-              echo "❌ API health check failed"
-              exit 1
-            fi
-
-            echo ""
-            echo "✅ Deployment verified successfully!"
-
-      - name: Notify deployment status
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Deployment to ${{ inputs.environment || 'production' }} succeeded!"
-          else
-            echo "❌ Deployment to ${{ inputs.environment || 'production' }} failed!"
-          fi
+            cd ${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}
+            NGINX_PORT=$(grep -E '^NGINX_PORT=' .env | cut -d'=' -f2 || echo "80")
+            curl -f http://localhost:${NGINX_PORT}/health || exit 1

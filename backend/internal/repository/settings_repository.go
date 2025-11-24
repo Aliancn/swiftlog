@@ -96,10 +96,10 @@ func (r *SettingsRepository) CreateDefaultUserSettings(ctx context.Context, user
 		"gpt-4o-mini",               // ai_model
 		500,                         // ai_max_tokens
 		false,                       // ai_auto_analyze
-		1000,                        // ai_max_log_lines
+		5000,                        // ai_max_log_lines
 		models.TruncateTail,         // ai_log_truncate_strategy
 		"en",                        // ai_prompt_language (default English)
-		3,                           // ai_max_concurrent
+		5,                           // ai_max_concurrent
 	).Scan(
 		&settings.ID,
 		&settings.UserID,

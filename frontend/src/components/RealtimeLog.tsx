@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { LogLine } from '@/types';
 import LogViewer from './LogViewer';
+import { getRunWebSocketUrl } from '@/lib/url';
 
 interface RealtimeLogProps {
   runId: string;
@@ -10,8 +11,6 @@ interface RealtimeLogProps {
   isRunning: boolean;
   onRunUpdate?: () => void; // Callback when run status changes
 }
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8081';
 
 export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunUpdate }: RealtimeLogProps) {
   const [logs, setLogs] = useState<LogLine[]>(initialLogs);
@@ -34,8 +33,8 @@ export default function RealtimeLog({ runId, initialLogs = [], isRunning, onRunU
         // Get token from localStorage
         const token = typeof window !== 'undefined' ? localStorage.getItem('swiftlog_token') : null;
 
-        // Connect without token in URL
-        const wsUrl = `${WS_URL}/ws/runs/${runId}`;
+        // Build WebSocket URL dynamically
+        const wsUrl = getRunWebSocketUrl(runId);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;

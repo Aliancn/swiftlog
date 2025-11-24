@@ -1,13 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { getRunWebSocketUrl } from '@/lib/url';
 
 interface RunStatusSubscriberProps {
   runId: string;
   onRunUpdate: () => void;
 }
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8081';
 
 /**
  * RunStatusSubscriber creates a WebSocket connection to receive run status updates.
@@ -25,8 +24,8 @@ export default function RunStatusSubscriber({ runId, onRunUpdate }: RunStatusSub
         // Get token from localStorage
         const token = typeof window !== 'undefined' ? localStorage.getItem('swiftlog_token') : null;
 
-        // Connect without token in URL
-        const wsUrl = `${WS_URL}/ws/runs/${runId}`;
+        // Build WebSocket URL dynamically
+        const wsUrl = getRunWebSocketUrl(runId);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;

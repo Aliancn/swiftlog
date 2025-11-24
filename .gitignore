@@ -84,8 +84,3 @@ specs/
 # backend/proto/*.pb.go
 # backend/proto/*_grpc.pb.go
 
-# build output 
-ai-worker
-ingestor
-websocket
-api

@@ -31,29 +31,9 @@ export default function RegisterPage() {
       return;
     }
 
-    // Password strength validation
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      setError('Password must contain at least one uppercase letter');
-      return;
-    }
-
-    if (!/[a-z]/.test(password)) {
-      setError('Password must contain at least one lowercase letter');
-      return;
-    }
-
-    if (!/[0-9]/.test(password)) {
-      setError('Password must contain at least one number');
-      return;
-    }
-
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-      setError('Password must contain at least one special character');
+    // Password strength validation (simplified)
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
 
@@ -214,7 +194,7 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
               <p className="mt-1 text-xs text-gray-500">
-                At least 8 characters
+                At least 6 characters
               </p>
             </div>
             <div>

@@ -72,9 +72,10 @@ func (h *StatusHandler) GetRecentRuns(c *gin.Context) {
 	userID := c.MustGet("user_id").(uuid.UUID)
 
 	// Parse limit parameter
-	limit := 20
+	// Relaxed for better usability
+	limit := 50
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
 			limit = l
 		}
 	}

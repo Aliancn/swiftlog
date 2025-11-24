@@ -27,9 +27,9 @@ const (
 )
 
 var (
-	upgrader         websocket.Upgrader
-	allowedOrigins   []string
-	isProduction     bool
+	upgrader       websocket.Upgrader
+	allowedOrigins []string
+	isProduction   bool
 )
 
 func main() {
@@ -51,7 +51,10 @@ func main() {
 	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
 	wsPort := config.GetEnv("WS_PORT", "8081")
 	environment := config.GetEnv("ENVIRONMENT", "development")
-	allowedOriginsStr := config.GetEnv("ALLOWED_ORIGINS", "http://localhost:3000")
+	allowedOriginsStr := config.GetEnv("CORS_ORIGINS", "http://localhost:3000")
+	if strings.TrimSpace(allowedOriginsStr) == "" {
+		allowedOriginsStr = "http://localhost:3000"
+	}
 
 	// Parse allowed origins
 	allowedOrigins = strings.Split(allowedOriginsStr, ",")
@@ -127,7 +130,7 @@ func main() {
 
 	// CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,

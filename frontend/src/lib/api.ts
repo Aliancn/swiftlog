@@ -1,7 +1,8 @@
 // SwiftLog API Client
 import type { Project, LogGroup, LogRun, LogLine, PaginatedResponse, UserSettings, ProjectSettings, EffectiveSettings, TruncateStrategy } from '@/types';
+import { getApiBaseUrl } from './url';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = getApiBaseUrl();
 
 class APIClient {
   private baseURL: string;
