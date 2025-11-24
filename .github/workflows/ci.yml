@@ -59,21 +59,26 @@ jobs:
     strategy:
       matrix:
         service:
-          - {name: api, context: backend, dockerfile: Dockerfile}
-          - {name: ingestor, context: backend, dockerfile: Dockerfile}
-          - {name: websocket, context: backend, dockerfile: Dockerfile}
-          - {name: ai-worker, context: backend, dockerfile: Dockerfile}
-          - {name: frontend, context: frontend, dockerfile: Dockerfile}
+          - {name: api, context: backend, dockerfile: Dockerfile, target: api}
+          - {name: ingestor, context: backend, dockerfile: Dockerfile, target: ingestor}
+          - {name: websocket, context: backend, dockerfile: Dockerfile, target: websocket}
+          - {name: ai-worker, context: backend, dockerfile: Dockerfile, target: ai-worker}
+          - {name: frontend, context: frontend, dockerfile: Dockerfile, target: ''}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v5
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service.context }}
           file: ./${{ matrix.service.context }}/${{ matrix.service.dockerfile }}
+          target: ${{ matrix.service.target }}
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=/api/v1
+            NEXT_PUBLIC_WS_BASE_URL=
 
   integration-test:
     runs-on: ubuntu-latest

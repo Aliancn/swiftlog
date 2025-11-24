@@ -79,9 +79,11 @@ jobs:
         run: |
           cd deploy
           VERSION=${{ steps.version.outputs.version }}
+          # Comment out build sections and add image lines
           sed -i 's/^    build:$/    #build:/' docker-compose.yaml
           sed -i 's/^      context:/      #context:/' docker-compose.yaml
           sed -i 's/^      dockerfile:/      #dockerfile:/' docker-compose.yaml
+          sed -i 's/^      target:/      #target:/' docker-compose.yaml
           sed -i '/container_name: swiftlog_ingestor/a\    image: ghcr.io/${{ github.repository }}/ingestor:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_api/a\    image: ghcr.io/${{ github.repository }}/api:'"${VERSION}" docker-compose.yaml
           sed -i '/container_name: swiftlog_websocket/a\    image: ghcr.io/${{ github.repository }}/websocket:'"${VERSION}" docker-compose.yaml

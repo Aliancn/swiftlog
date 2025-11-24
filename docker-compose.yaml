@@ -198,12 +198,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Use PUBLIC_URL as base for all frontend requests
-        # PUBLIC_URL should be set in .env (e.g., http://localhost or https://swiftlog.whuiosclub.cn)
-        # Frontend code will append paths: /api/v1, /ws/runs/*, etc.
-        NEXT_PUBLIC_API_URL: ${PUBLIC_URL:-http://localhost}/api/v1
-        # For WebSocket, pass the base URL (frontend will convert http->ws, https->wss)
-        NEXT_PUBLIC_WS_BASE_URL: ${PUBLIC_URL:-http://localhost}
+        # Use relative paths for production (through nginx proxy)
+        # Frontend is served through nginx which proxies /api/v1 and /ws
+        NEXT_PUBLIC_API_URL: /api/v1
+        NEXT_PUBLIC_WS_BASE_URL: ""
     container_name: swiftlog_frontend
     environment:
       NODE_ENV: production

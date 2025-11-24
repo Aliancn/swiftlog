@@ -37,8 +37,14 @@ export function getWebSocketUrl(path: string): string {
 
   const baseUrl = process.env.NEXT_PUBLIC_WS_BASE_URL;
 
-  // If no base URL configured, use default development URL
-  if (!baseUrl) {
+  // If no base URL configured or empty string, use window.location (production through nginx)
+  if (!baseUrl || baseUrl === '') {
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      return `${protocol}//${host}${normalizedPath}`;
+    }
+    // Server-side fallback
     return `ws://localhost:8081${normalizedPath}`;
   }
 
