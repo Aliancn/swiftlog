@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// Load configuration from environment
-	dbURL := config.GetEnv("DATABASE_URL", "postgres://swiftlog:changeme@localhost:5432/swiftlog?sslmode=disable")
+	dbURL := config.BuildDatabaseURL()
 	lokiURL := config.GetEnv("LOKI_URL", "http://localhost:3100")
 	redisURL := config.GetEnv("REDIS_URL", "redis://localhost:6379")
 	apiPort := config.GetEnv("API_PORT", "8080")

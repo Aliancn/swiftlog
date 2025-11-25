@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"time"
 
@@ -34,6 +35,33 @@ func GetEnvDuration(key string, defaultValue time.Duration) time.Duration {
 		return duration
 	}
 	return defaultValue
+}
+
+// BuildDatabaseURL constructs a properly formatted PostgreSQL connection URL from
+// individual components, handling special characters in the password through URL encoding.
+// If DATABASE_URL is already set, it returns that value unchanged.
+func BuildDatabaseURL() string {
+	// If DATABASE_URL is already set, use it directly
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		return dbURL
+	}
+
+	// Build from individual components
+	user := GetEnv("POSTGRES_USER", "swiftlog")
+	password := GetEnv("POSTGRES_PASSWORD", "changeme")
+	host := GetEnv("POSTGRES_HOST", "postgres")
+	port := GetEnv("POSTGRES_PORT", "5432")
+	dbName := GetEnv("POSTGRES_DB", "swiftlog")
+	sslMode := GetEnv("POSTGRES_SSLMODE", "disable")
+
+	// URL-encode the password to handle special characters
+	encodedPassword := url.QueryEscape(password)
+
+	// Build the connection string
+	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		user, encodedPassword, host, port, dbName, sslMode)
+
+	return dbURL
 }
 
 // InitDatabase initializes a database connection with standard connection pool settings

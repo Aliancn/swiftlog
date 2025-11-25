@@ -38,33 +38,7 @@ jobs:
           mkdir -p deploy/nginx
           cp docker-compose.yaml deploy/
           cp loki-config.yaml deploy/
-          cp .env.example deploy/.env
           cp nginx/nginx.conf deploy/nginx/
-
-          cat > deploy/update-env.sh << 'EOF'
-          #!/bin/bash
-          set -e
-          ENV_FILE="${1:-.env}"
-          update_env() {
-            [ -z "$2" ] && return
-            if grep -q "^$1=" "$ENV_FILE"; then
-              sed -i.bak "s|^$1=.*|$1=$2|" "$ENV_FILE"
-            else
-              echo "$1=$2" >> "$ENV_FILE"
-            fi
-          }
-          [ -n "$PUBLIC_URL" ] && update_env "PUBLIC_URL" "$PUBLIC_URL"
-          [ -n "$NGINX_PORT" ] && update_env "NGINX_PORT" "$NGINX_PORT"
-          [ -n "$POSTGRES_PASSWORD" ] && update_env "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD"
-          [ -n "$JWT_SECRET" ] && update_env "JWT_SECRET" "$JWT_SECRET"
-          [ -n "$ENCRYPTION_KEY" ] && update_env "ENCRYPTION_KEY" "$ENCRYPTION_KEY"
-          [ -n "$ADMIN_USERNAME" ] && update_env "ADMIN_USERNAME" "$ADMIN_USERNAME"
-          [ -n "$ADMIN_PASSWORD" ] && update_env "ADMIN_PASSWORD" "$ADMIN_PASSWORD"
-          [ -n "$ENVIRONMENT" ] && update_env "ENVIRONMENT" "$ENVIRONMENT"
-          [ -n "$LOG_LEVEL" ] && update_env "LOG_LEVEL" "$LOG_LEVEL"
-          [ -n "$CORS_ORIGINS" ] && update_env "CORS_ORIGINS" "$CORS_ORIGINS"
-          rm -f "${ENV_FILE}.bak"
-          EOF
 
           cat > deploy/update.sh << 'EOF'
           #!/bin/bash
@@ -83,7 +57,7 @@ jobs:
           docker compose logs --tail=50
           EOF
 
-          chmod +x deploy/*.sh
+          chmod +x deploy/update.sh
 
       - name: Update docker-compose
         run: |
@@ -119,21 +93,29 @@ jobs:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         env:
-          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
-          NGINX_PORT: ${{ secrets.NGINX_PORT || '80' }}
+          # Required secrets
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME || 'admin' }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ENVIRONMENT: production
+          # Optional configuration
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+          NGINX_PORT: ${{ secrets.NGINX_PORT || '80' }}
+          GRPC_PORT: ${{ secrets.GRPC_PORT || '50051' }}
+          API_PORT: ${{ secrets.API_PORT || '8080' }}
+          WS_PORT: ${{ secrets.WS_PORT || '8081' }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER || 'swiftlog' }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB || 'swiftlog' }}
+          JWT_EXPIRATION: ${{ secrets.JWT_EXPIRATION || '2h' }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME || 'admin' }}
+          ENVIRONMENT: ${{ secrets.ENVIRONMENT || 'production' }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: PUBLIC_URL,NGINX_PORT,POSTGRES_PASSWORD,JWT_SECRET,ENCRYPTION_KEY,ADMIN_USERNAME,ADMIN_PASSWORD,ENVIRONMENT,LOG_LEVEL,CORS_ORIGINS
+          envs: POSTGRES_PASSWORD,JWT_SECRET,ENCRYPTION_KEY,ADMIN_PASSWORD,PUBLIC_URL,NGINX_PORT,GRPC_PORT,API_PORT,WS_PORT,POSTGRES_USER,POSTGRES_DB,JWT_EXPIRATION,ADMIN_USERNAME,ENVIRONMENT,LOG_LEVEL,CORS_ORIGINS
           script: |
             set -e
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH || '/opt/swiftlog' }}"
@@ -143,32 +125,55 @@ jobs:
             # Prepare deployment directory
             sudo mkdir -p $DEPLOY_DIR
 
-            # Backup current .env if exists
-            [ -f $DEPLOY_DIR/.env ] && sudo cp $DEPLOY_DIR/.env /tmp/.env.backup
-
             # Copy new files
             sudo cp -r /tmp/deploy/* $DEPLOY_DIR/
-
-            # Restore .env or use new one
-            [ -f /tmp/.env.backup ] && sudo cp /tmp/.env.backup $DEPLOY_DIR/.env || sudo cp /tmp/deploy/.env $DEPLOY_DIR/.env
 
             # Set ownership
             sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} $DEPLOY_DIR
 
             cd $DEPLOY_DIR
 
-            # Update environment variables
-            export PUBLIC_URL NGINX_PORT POSTGRES_PASSWORD JWT_SECRET ENCRYPTION_KEY ADMIN_USERNAME ADMIN_PASSWORD ENVIRONMENT LOG_LEVEL CORS_ORIGINS
-            ./update-env.sh .env
-
             # Validate required secrets
             echo "Validating required environment variables..."
             [ -z "$POSTGRES_PASSWORD" ] && echo "ERROR: POSTGRES_PASSWORD is required" && exit 1
             [ -z "$JWT_SECRET" ] && echo "ERROR: JWT_SECRET is required" && exit 1
             [ -z "$ENCRYPTION_KEY" ] && echo "ERROR: ENCRYPTION_KEY is required" && exit 1
+            [ -z "$ADMIN_PASSWORD" ] && echo "ERROR: ADMIN_PASSWORD is required" && exit 1
 
             # Set CORS_ORIGINS to PUBLIC_URL if not set
-            [ -z "$CORS_ORIGINS" ] && [ -n "$PUBLIC_URL" ] && export CORS_ORIGINS="$PUBLIC_URL" && ./update-env.sh .env
+            [ -z "$CORS_ORIGINS" ] && [ -n "$PUBLIC_URL" ] && export CORS_ORIGINS="$PUBLIC_URL"
+
+            # Create .env file from environment variables
+            echo "Creating .env file from GitHub secrets..."
+            cat > .env << ENVEOF
+# Database Configuration
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB}
+
+# Service Ports
+NGINX_PORT=${NGINX_PORT}
+GRPC_PORT=${GRPC_PORT}
+API_PORT=${API_PORT}
+WS_PORT=${WS_PORT}
+
+# Security
+JWT_SECRET=${JWT_SECRET}
+JWT_EXPIRATION=${JWT_EXPIRATION}
+ENCRYPTION_KEY=${ENCRYPTION_KEY}
+
+# Admin Account
+ADMIN_USERNAME=${ADMIN_USERNAME}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
+# Application Configuration
+ENVIRONMENT=${ENVIRONMENT}
+LOG_LEVEL=${LOG_LEVEL}
+CORS_ORIGINS=${CORS_ORIGINS}
+PUBLIC_URL=${PUBLIC_URL}
+ENVEOF
+
+            echo "✓ Environment file created"
 
             # Login to GitHub Container Registry
             echo "Logging in to GitHub Container Registry..."
@@ -182,7 +187,7 @@ jobs:
             docker logout ghcr.io
 
             # Cleanup
-            rm -rf /tmp/deploy /tmp/.env.backup
+            rm -rf /tmp/deploy
 
             echo "=== Deployment completed at $(date) ==="
 
@@ -197,8 +202,10 @@ jobs:
 
             echo "=== Running health checks ==="
 
-            # Get nginx port from .env
-            NGINX_PORT=$(grep -E '^NGINX_PORT=' .env | cut -d'=' -f2 || echo "80")
+            # Source .env file to get variables
+            set -a
+            source .env
+            set +a
 
             # Wait for services to be fully ready
             echo "Waiting 10 seconds for services to stabilize..."

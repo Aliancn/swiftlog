@@ -13,30 +13,52 @@
 
 ### GitHub Secrets 配置
 
+所有环境配置通过GitHub Secrets管理。可以使用提供的脚本自动配置，或手动在GitHub仓库的Settings -> Secrets and variables -> Actions中配置。
+
+#### 方式1：使用自动配置脚本（推荐）
+
+```bash
+./scripts/setup-gh-secrets.sh
+```
+
+该脚本会交互式地配置所有必需的secrets，并自动生成安全的随机密钥。
+
+#### 方式2：手动配置Secrets
+
 在GitHub仓库的Settings -> Secrets and variables -> Actions中配置以下secrets：
 
-#### 必需的Secrets
+##### 必需的Secrets
 
-| Secret名称 | 说明 | 示例 |
-|-----------|------|------|
+| Secret名称 | 说明 | 示例/生成方式 |
+|-----------|------|--------------|
 | `DEPLOY_HOST` | 部署服务器的IP或域名 | `123.45.67.89` |
 | `DEPLOY_USER` | SSH用户名 | `ubuntu` |
 | `DEPLOY_SSH_KEY` | SSH私钥（完整内容） | `-----BEGIN RSA PRIVATE KEY-----\n...` |
-| `POSTGRES_PASSWORD` | PostgreSQL数据库密码 | 强随机密码，32+字符 |
-| `JWT_SECRET` | JWT签名密钥 | 使用`openssl rand -base64 32`生成 |
-| `ENCRYPTION_KEY` | API密钥加密密钥 | 使用`openssl rand -base64 32`生成 |
-| `ADMIN_PASSWORD` | 初始管理员密码 | 强密码 |
+| `POSTGRES_PASSWORD` | PostgreSQL数据库密码 | `openssl rand -base64 32` |
+| `JWT_SECRET` | JWT签名密钥 | `openssl rand -base64 32` |
+| `ENCRYPTION_KEY` | API密钥加密密钥 | `openssl rand -base64 32` |
+| `ADMIN_PASSWORD` | 初始管理员密码 | `openssl rand -base64 16` |
 
-#### 可选的Secrets
+##### 可选的Secrets（带默认值）
 
 | Secret名称 | 说明 | 默认值 |
 |-----------|------|--------|
-| `PUBLIC_URL` | 公网访问URL | `http://localhost` |
-| `NGINX_PORT` | Nginx映射到主机的端口 | `80` |
 | `DEPLOY_PATH` | 服务器上的部署路径 | `/opt/swiftlog` |
-| `ADMIN_USERNAME` | 初始管理员用户名 | `admin` |
-| `LOG_LEVEL` | 日志级别 | `info` |
+| `PUBLIC_URL` | 公网访问URL | - |
 | `CORS_ORIGINS` | CORS允许的源 | 自动使用`PUBLIC_URL` |
+| `ENVIRONMENT` | 运行环境 | `production` |
+| `LOG_LEVEL` | 日志级别 | `info` |
+| **数据库配置** | | |
+| `POSTGRES_USER` | PostgreSQL用户名 | `swiftlog` |
+| `POSTGRES_DB` | PostgreSQL数据库名 | `swiftlog` |
+| **端口配置** | | |
+| `NGINX_PORT` | Nginx映射到主机的端口 | `80` |
+| `GRPC_PORT` | gRPC服务端口 | `50051` |
+| `API_PORT` | API服务内部端口 | `8080` |
+| `WS_PORT` | WebSocket服务内部端口 | `8081` |
+| **安全配置** | | |
+| `ADMIN_USERNAME` | 初始管理员用户名 | `admin` |
+| `JWT_EXPIRATION` | JWT过期时间 | `2h` |
 
 ## 部署流程
 
@@ -85,7 +107,7 @@ Deploy流程执行以下步骤：
    - 复制 `docker-compose.yaml`
    - 复制 `nginx/nginx.conf`
    - 复制 `loki-config.yaml`
-   - 创建环境变量更新脚本
+   - 创建服务更新脚本
 
 2. **修改Docker Compose配置**
    - 注释掉本地构建配置
@@ -97,9 +119,8 @@ Deploy流程执行以下步骤：
 
 4. **在服务器上执行部署**
    - 创建部署目录（默认`/opt/swiftlog`）
-   - 备份现有`.env`文件
    - 复制新文件到部署目录
-   - 更新环境变量
+   - **从GitHub Secrets自动创建.env文件**（包含所有环境变量）
    - 验证必需的secrets
    - 登录GitHub Container Registry
    - 拉取最新镜像
@@ -112,6 +133,11 @@ Deploy流程执行以下步骤：
    - 测试Nginx健康端点
    - 测试API健康端点
    - 如果失败，输出日志并退出
+
+**重要说明**：
+- 所有环境变量都从GitHub Secrets自动注入，无需手动修改.env文件
+- 每次部署都会重新创建.env文件，确保配置与GitHub Secrets同步
+- 要更改配置，只需在GitHub Secrets中修改，然后重新部署
 
 ## 服务器初始设置
 
@@ -169,20 +195,72 @@ sudo ufw allow 50051/tcp
 
 ## 生产环境配置
 
-### 推荐配置
+### 配置管理
+
+所有配置都通过GitHub Secrets管理。要修改配置：
+
+1. 在GitHub仓库的 Settings -> Secrets and variables -> Actions 中修改相应的secret
+2. 重新触发部署（推送新tag或手动触发deploy workflow）
+3. 部署流程会自动使用新配置创建.env文件
+
+### 推荐的生产环境配置
+
+使用 `scripts/setup-gh-secrets.sh` 脚本时，建议的配置：
 
 ```bash
-# 生产环境 secrets 示例（在GitHub Secrets中配置）
-PUBLIC_URL=https://swiftlog.yourdomain.com
-NGINX_PORT=8080  # 如果使用外部nginx反向代理
-POSTGRES_PASSWORD=<strong-random-password>
-JWT_SECRET=<openssl rand -base64 32>
-ENCRYPTION_KEY=<openssl rand -base64 32>
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=<strong-password>
-LOG_LEVEL=info
-CORS_ORIGINS=https://swiftlog.yourdomain.com
+# 部署配置
+Server IP/domain: your-server-ip
+SSH user: ubuntu
+Deploy path: /opt/swiftlog
+SSH key path: ~/.ssh/id_ed25519
+
+# 数据库配置
+PostgreSQL user: swiftlog
+PostgreSQL database name: swiftlog
+PostgreSQL password: (auto-generated 32-byte key)
+
+# 端口配置
+NGINX port: 80  # 或443（如果使用HTTPS）
+gRPC port: 50051  # 保持默认
+API port: 8080  # 保持默认
+WebSocket port: 8081  # 保持默认
+
+# 应用配置
+Public URL: https://logs.yourdomain.com
+CORS origins: https://logs.yourdomain.com  # 或留空自动使用PUBLIC_URL
+Environment: production
+Log level: info  # 或warn（减少日志量）
+
+# 安全配置
+Admin username: admin  # 或自定义
+Admin password: (auto-generated)
+JWT expiration: 2h  # 或更短（1h）提高安全性
+JWT secret: (auto-generated)
+Encryption key: (auto-generated)
 ```
+
+### 安全最佳实践
+
+1. **密钥管理**
+   - 所有密钥都由脚本自动生成（32+字符）
+   - 保存脚本输出的credentials到安全的密码管理器
+   - 定期轮换JWT_SECRET和ENCRYPTION_KEY（建议每季度）
+
+2. **密码强度**
+   - POSTGRES_PASSWORD: 32字节base64编码
+   - JWT_SECRET: 32字节base64编码
+   - ENCRYPTION_KEY: 32字节base64编码
+   - ADMIN_PASSWORD: 16字节base64编码（足够安全）
+
+3. **网络安全**
+   - 生产环境必须使用HTTPS（配置外部nginx反向代理）
+   - 限制SSH访问（仅允许特定IP）
+   - 配置防火墙规则（仅开放必要端口）
+
+4. **日志和监控**
+   - 使用 `LOG_LEVEL=warn` 或 `info` 平衡安全和调试需求
+   - 定期查看容器日志检查异常
+   - 设置日志告警（可选）
 
 ### 外部Nginx配置（推荐）
 
@@ -323,15 +401,6 @@ docker login ghcr.io
 # 手动拉取测试
 docker pull ghcr.io/aliancn/swiftlog/api:latest
 ```
-
-## 安全建议
-
-1. **使用强密码**：所有密码至少32字符，包含大小写字母、数字和特殊字符
-2. **定期更新**：定期更新JWT_SECRET和ENCRYPTION_KEY
-3. **使用HTTPS**：生产环境必须使用HTTPS
-4. **限制SSH访问**：仅允许特定IP访问SSH
-5. **定期备份**：建立自动备份策略
-6. **监控日志**：设置日志告警，及时发现异常
 
 ## 性能优化
 

@@ -145,10 +145,16 @@ func ValidateConfig() error {
 
 	environment := GetEnv("ENVIRONMENT", "development")
 
-	// Database configuration
-	v.RequireEnv("DATABASE_URL")
-	databaseURL := GetEnv("DATABASE_URL", "")
-	v.ValidateURL("DATABASE_URL", databaseURL)
+	// Database configuration - build from components if needed
+	databaseURL := BuildDatabaseURL()
+	if databaseURL == "" {
+		v.errors = append(v.errors, ValidationError{
+			Field:   "DATABASE_URL",
+			Message: "required but not set (or unable to build from POSTGRES_* variables)",
+		})
+	} else {
+		v.ValidateURL("DATABASE_URL", databaseURL)
+	}
 
 	// Loki configuration
 	lokiURL := GetEnv("LOKI_URL", "http://localhost:3100")
