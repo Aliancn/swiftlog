@@ -81,23 +81,23 @@ Release流程会自动：
 
 ### 2. Deploy流程（部署到服务器）
 
-部署可以通过两种方式触发：
+**部署采用手动触发方式**，需要在GitHub Actions页面手动启动：
 
-#### 方式1：Tag触发自动部署
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-这会先执行Release流程，构建镜像后自动部署到生产环境。
+#### 手动部署步骤
 
-#### 方式2：手动触发部署
-在GitHub Actions页面：
-1. 选择 "Deploy" workflow
-2. 点击 "Run workflow"
-3. 选择环境（production 或 staging）
-4. 点击 "Run workflow"
+1. 进入GitHub仓库页面
+2. 点击 "Actions" 选项卡
+3. 在左侧选择 "Deploy" workflow
+4. 点击右侧的 "Run workflow" 按钮
+5. 在弹出的对话框中配置：
+   - **version**: 要部署的Docker镜像版本（例如：`0.1.0`, `latest`）
+   - **environment**: 部署环境（`production` 或 `staging`）
+6. 点击 "Run workflow" 开始部署
 
-手动部署会使用最新的`latest`标签镜像。
+**版本选择说明**：
+- 输入版本号时**不要**包含 `v` 前缀（例如：输入 `0.1.0` 而不是 `v0.1.0`）
+- 使用 `latest` 可以部署最新构建的镜像
+- 版本号必须对应已发布的Docker镜像标签
 
 ### 3. 部署步骤详解
 

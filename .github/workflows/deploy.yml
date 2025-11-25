@@ -1,14 +1,19 @@
 name: Deploy
 
 on:
-  push:
-    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Docker image version to deploy (e.g., 0.1.0, latest)'
+        required: true
+        default: 'latest'
+        type: string
       environment:
+        description: 'Deployment environment'
         type: choice
         options: [production, staging]
         default: production
+        required: true
 
 permissions:
   contents: read
@@ -24,14 +29,7 @@ jobs:
       - name: Set version
         id: version
         run: |
-          if [ "${{ github.ref_type }}" == "tag" ]; then
-            # Remove 'v' prefix from tag for Docker image tag
-            VERSION=${GITHUB_REF#refs/tags/}
-            VERSION=${VERSION#v}
-            echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          else
-            echo "version=latest" >> $GITHUB_OUTPUT
-          fi
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Prepare deployment
         run: |
@@ -43,6 +41,13 @@ jobs:
           cat > deploy/update.sh << 'EOF'
           #!/bin/bash
           set -e
+
+          # Load environment variables from .env file
+          echo "Loading environment variables from .env..."
+          set -a
+          source .env
+          set +a
+
           echo "Pulling latest images..."
           docker compose pull
           echo "Stopping services..."
