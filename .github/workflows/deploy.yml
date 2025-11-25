@@ -25,7 +25,10 @@ jobs:
         id: version
         run: |
           if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            # Remove 'v' prefix from tag for Docker image tag
+            VERSION=${GITHUB_REF#refs/tags/}
+            VERSION=${VERSION#v}
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
           else
             echo "version=latest" >> $GITHUB_OUTPUT
           fi
