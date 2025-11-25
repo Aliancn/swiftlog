@@ -81,10 +81,12 @@ jobs:
           for migration_file in backend/migrations/*.sql; do
             if [ -f "$migration_file" ]; then
               echo "Applying migration: $(basename $migration_file)"
-              if docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$migration_file" 2>&1 | grep -v "already exists\|skipping"; then
-                echo "✓ Migration applied: $(basename $migration_file)"
+              cat "$migration_file" | docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" 2>&1 | tee /tmp/migration.log
+              if grep -qi "error" /tmp/migration.log; then
+                echo "⚠ Warning in migration: $(basename $migration_file)"
+                cat /tmp/migration.log
               else
-                echo "⚠ Migration skipped or already applied: $(basename $migration_file)"
+                echo "✓ Migration applied: $(basename $migration_file)"
               fi
             fi
           done
@@ -267,23 +269,29 @@ jobs:
             fi
 
 
-            # Test nginx endpoint
-            echo "Testing nginx health endpoint..."
-            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/health | grep -q "200"; then
-              echo "ERROR: Nginx health check failed"
-              docker compose logs nginx
+            # Test health endpoint (nginx -> api)
+            echo "Testing health endpoint (nginx -> api)..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/health)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ Health check passed (HTTP $HTTP_CODE)"
+            else
+              echo "ERROR: Health check failed (HTTP $HTTP_CODE)"
+              echo "=== Nginx logs ==="
+              docker compose logs --tail=20 nginx
+              echo "=== API logs ==="
+              docker compose logs --tail=20 api
               exit 1
             fi
-            echo "✓ Nginx is healthy"
 
-            # Test API endpoint
-            echo "Testing API health endpoint..."
-            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/api/health | grep -q "200"; then
-              echo "ERROR: API health check failed"
-              docker compose logs api
-              exit 1
+            # Test frontend accessibility
+            echo "Testing frontend endpoint..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/)
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "304" ]; then
+              echo "✓ Frontend is accessible (HTTP $HTTP_CODE)"
+            else
+              echo "WARNING: Frontend check returned HTTP $HTTP_CODE"
+              docker compose logs --tail=20 frontend
             fi
-            echo "✓ API is healthy"
 
             echo "=== Health checks passed ==="
             echo "Deployment successful!"
