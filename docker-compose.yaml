@@ -84,7 +84,7 @@ services:
       target: ingestor
     container_name: swiftlog_ingestor
     ports:
-      - "${GRPC_PORT:-50051}:50051"
+      - "${GRPC_PORT:-50051}:${GRPC_PORT:-50051}"
     environment:
       # Database connection (built from individual components)
       POSTGRES_USER: ${POSTGRES_USER:-swiftlog}

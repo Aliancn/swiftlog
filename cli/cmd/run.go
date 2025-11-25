@@ -30,6 +30,7 @@ Example:
 var (
 	projectName string
 	groupName   string
+	useTLS      bool
 )
 
 func init() {
@@ -37,6 +38,7 @@ func init() {
 
 	runCmd.Flags().StringVar(&projectName, "project", "", "Project name (default: \"default\")")
 	runCmd.Flags().StringVar(&groupName, "group", "", "Group name (default: \"default\")")
+	runCmd.Flags().BoolVar(&useTLS, "tls", false, "Enable TLS/secure connection")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -73,6 +75,12 @@ func runRun(cmd *cobra.Command, args []string) error {
 		cfg.ServerAddr = server
 	}
 
+	// Handle TLS flag: command line flag takes precedence over config
+	tlsEnabled := cfg.TLS
+	if cmd.Flags().Changed("tls") {
+		tlsEnabled = useTLS
+	}
+
 	if cfg.Token == "" {
 		return fmt.Errorf("no API token configured. Run 'swiftlog config set --token YOUR_TOKEN' first")
 	}
@@ -95,6 +103,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	grpcClient, err := client.NewClient(&client.Config{
 		ServerAddr: cfg.ServerAddr,
 		Token:      cfg.Token,
+		TLS:        tlsEnabled,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)

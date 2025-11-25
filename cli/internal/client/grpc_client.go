@@ -2,12 +2,14 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"time"
 
 	pb "github.com/aliancn/swiftlog/cli/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,14 +26,25 @@ type Client struct {
 type Config struct {
 	ServerAddr string
 	Token      string
+	TLS        bool // Enable TLS/secure connection
 }
 
 // NewClient creates a new gRPC client
 func NewClient(cfg *Config) (*Client, error) {
+	// Determine transport credentials based on TLS setting
+	var creds credentials.TransportCredentials
+	if cfg.TLS {
+		// Use TLS credentials with system cert pool
+		creds = credentials.NewTLS(&tls.Config{})
+	} else {
+		// Use insecure credentials (no TLS)
+		creds = insecure.NewCredentials()
+	}
+
 	// Create gRPC connection
 	conn, err := grpc.NewClient(
 		cfg.ServerAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)

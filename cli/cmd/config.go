@@ -40,6 +40,8 @@ var (
 	setToken          string
 	setServer         string
 	setDefaultProject string
+	setTLS            bool
+	tlsFlagSet        bool
 )
 
 func init() {
@@ -52,6 +54,7 @@ func init() {
 	configSetCmd.Flags().StringVar(&setToken, "token", "", "API token")
 	configSetCmd.Flags().StringVar(&setServer, "server", "", "Server address (e.g., localhost:50051)")
 	configSetCmd.Flags().StringVar(&setDefaultProject, "default-project", "", "Default project name")
+	configSetCmd.Flags().BoolVar(&setTLS, "tls", false, "Enable TLS/secure connection")
 }
 
 func runConfigSet(cmd *cobra.Command, args []string) error {
@@ -80,9 +83,18 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✓ Default project set to: %s\n", setDefaultProject)
 		updated = true
 	}
+	if cmd.Flags().Changed("tls") {
+		cfg.TLS = setTLS
+		if setTLS {
+			fmt.Println("✓ TLS enabled")
+		} else {
+			fmt.Println("✓ TLS disabled")
+		}
+		updated = true
+	}
 
 	if !updated {
-		return fmt.Errorf("no configuration values provided. Use --token, --server, or --default-project")
+		return fmt.Errorf("no configuration values provided. Use --token, --server, --default-project, or --tls")
 	}
 
 	// Save config
@@ -115,6 +127,11 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  API Token:        %s\n", maskedToken)
 	} else {
 		fmt.Println("  API Token:        (not set)")
+	}
+	if cfg.TLS {
+		fmt.Println("  TLS:              enabled")
+	} else {
+		fmt.Println("  TLS:              disabled")
 	}
 
 	// Default settings

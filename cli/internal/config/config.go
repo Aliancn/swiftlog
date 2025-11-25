@@ -14,6 +14,7 @@ type Config struct {
 	ServerAddr     string `mapstructure:"server_addr"`
 	DefaultProject string `mapstructure:"default_project"`
 	LastProject    string `mapstructure:"last_project"`
+	TLS            bool   `mapstructure:"tls"` // Enable TLS/secure connection
 }
 
 // ProjectConfig holds project-level configuration
@@ -72,6 +73,7 @@ func Save(cfg *Config) error {
 	viper.Set("server_addr", cfg.ServerAddr)
 	viper.Set("default_project", cfg.DefaultProject)
 	viper.Set("last_project", cfg.LastProject)
+	viper.Set("tls", cfg.TLS)
 
 	if err := viper.WriteConfigAs(configFile); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
