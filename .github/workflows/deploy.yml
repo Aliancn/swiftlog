@@ -145,33 +145,33 @@ jobs:
 
             # Create .env file from environment variables
             echo "Creating .env file from GitHub secrets..."
-            cat > .env << ENVEOF
-# Database Configuration
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=${POSTGRES_DB}
-
-# Service Ports
-NGINX_PORT=${NGINX_PORT}
-GRPC_PORT=${GRPC_PORT}
-API_PORT=${API_PORT}
-WS_PORT=${WS_PORT}
-
-# Security
-JWT_SECRET=${JWT_SECRET}
-JWT_EXPIRATION=${JWT_EXPIRATION}
-ENCRYPTION_KEY=${ENCRYPTION_KEY}
-
-# Admin Account
-ADMIN_USERNAME=${ADMIN_USERNAME}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-
-# Application Configuration
-ENVIRONMENT=${ENVIRONMENT}
-LOG_LEVEL=${LOG_LEVEL}
-CORS_ORIGINS=${CORS_ORIGINS}
-PUBLIC_URL=${PUBLIC_URL}
-ENVEOF
+            {
+              echo "# Database Configuration"
+              echo "POSTGRES_USER=$POSTGRES_USER"
+              echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+              echo "POSTGRES_DB=$POSTGRES_DB"
+              echo ""
+              echo "# Service Ports"
+              echo "NGINX_PORT=$NGINX_PORT"
+              echo "GRPC_PORT=$GRPC_PORT"
+              echo "API_PORT=$API_PORT"
+              echo "WS_PORT=$WS_PORT"
+              echo ""
+              echo "# Security"
+              echo "JWT_SECRET=$JWT_SECRET"
+              echo "JWT_EXPIRATION=$JWT_EXPIRATION"
+              echo "ENCRYPTION_KEY=$ENCRYPTION_KEY"
+              echo ""
+              echo "# Admin Account"
+              echo "ADMIN_USERNAME=$ADMIN_USERNAME"
+              echo "ADMIN_PASSWORD=$ADMIN_PASSWORD"
+              echo ""
+              echo "# Application Configuration"
+              echo "ENVIRONMENT=$ENVIRONMENT"
+              echo "LOG_LEVEL=$LOG_LEVEL"
+              echo "CORS_ORIGINS=$CORS_ORIGINS"
+              echo "PUBLIC_URL=$PUBLIC_URL"
+            } > .env
 
             echo "✓ Environment file created"
 
