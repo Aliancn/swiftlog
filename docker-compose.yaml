@@ -98,9 +98,9 @@ services:
       REDIS_URL: redis://redis:6379
       GRPC_PORT: "${GRPC_PORT:-50051}"
       # Config from .env
-      LOG_LEVEL: ${LOG_LEVEL:-info}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,10 +168,12 @@ services:
       REDIS_URL: redis://redis:6379
       WS_PORT: "${WS_PORT:-8081}"
       # Config from .env
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-2h}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy

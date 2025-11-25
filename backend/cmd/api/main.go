@@ -29,7 +29,7 @@ func main() {
 
 	// Validate environment configuration
 	log.Println("Validating environment configuration...")
-	if err := config.ValidateConfig(); err != nil {
+	if err := config.ValidateConfigForService(config.ServiceTypeAPI); err != nil {
 		log.Printf("Configuration validation warnings/errors:\n%v", err)
 		// In development, log warnings but continue
 		// In production, the validation will have caught critical errors

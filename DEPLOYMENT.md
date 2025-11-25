@@ -39,13 +39,20 @@
 | `ENCRYPTION_KEY` | API密钥加密密钥 | `openssl rand -base64 32` |
 | `ADMIN_PASSWORD` | 初始管理员密码 | `openssl rand -base64 16` |
 
-##### 可选的Secrets（带默认值）
+##### 可选但强烈推荐的Secrets
+
+| Secret名称 | 说明 | 默认值 | 重要性 |
+|-----------|------|--------|--------|
+| `PUBLIC_URL` | 公网访问URL | - | **强烈推荐**,用于设置CORS |
+| `CORS_ORIGINS` | CORS允许的源（多个用逗号分隔） | 使用`PUBLIC_URL`值 | **强烈推荐** |
+
+> ⚠️ **重要**: 在生产环境中,强烈建议设置 `PUBLIC_URL` 或 `CORS_ORIGINS`,否则会使用默认值 `http://localhost,http://127.0.0.1`,这可能导致跨域访问问题。
+
+##### 其他可选Secrets
 
 | Secret名称 | 说明 | 默认值 |
 |-----------|------|--------|
 | `DEPLOY_PATH` | 服务器上的部署路径 | `/opt/swiftlog` |
-| `PUBLIC_URL` | 公网访问URL | - |
-| `CORS_ORIGINS` | CORS允许的源 | 自动使用`PUBLIC_URL` |
 | `ENVIRONMENT` | 运行环境 | `production` |
 | `LOG_LEVEL` | 日志级别 | `info` |
 | **数据库配置** | | |

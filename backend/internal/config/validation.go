@@ -139,12 +139,43 @@ func (v *ConfigValidator) Errors() error {
 	return v.errors
 }
 
-// ValidateConfig validates all required environment variables
-func ValidateConfig() error {
-	v := NewConfigValidator()
+// ServiceType represents the type of service being validated
+type ServiceType string
 
+const (
+	ServiceTypeAPI       ServiceType = "api"
+	ServiceTypeWebSocket ServiceType = "websocket"
+	ServiceTypeIngestor  ServiceType = "ingestor"
+	ServiceTypeAIWorker  ServiceType = "ai-worker"
+)
+
+// ValidateConfigForService validates environment variables for a specific service type
+func ValidateConfigForService(serviceType ServiceType) error {
+	v := NewConfigValidator()
 	environment := GetEnv("ENVIRONMENT", "development")
 
+	// Common validations for all services
+	validateCommon(v, environment)
+
+	// Service-specific validations
+	switch serviceType {
+	case ServiceTypeAPI, ServiceTypeWebSocket:
+		validateAuthServices(v, environment)
+	case ServiceTypeIngestor, ServiceTypeAIWorker:
+		// These services don't need JWT/CORS validation
+		// They only need common database/redis/loki connections
+	}
+
+	return v.Errors()
+}
+
+// ValidateConfig validates all required environment variables (legacy method for backward compatibility)
+// This validates as if it's an API service (most restrictive)
+func ValidateConfig() error {
+	return ValidateConfigForService(ServiceTypeAPI)
+}
+
+func validateCommon(v *ConfigValidator, environment string) {
 	// Database configuration - build from components if needed
 	databaseURL := BuildDatabaseURL()
 	if databaseURL == "" {
@@ -156,35 +187,30 @@ func ValidateConfig() error {
 		v.ValidateURL("DATABASE_URL", databaseURL)
 	}
 
-	// Loki configuration
-	lokiURL := GetEnv("LOKI_URL", "http://localhost:3100")
-	v.ValidateURL("LOKI_URL", lokiURL)
+	// Loki configuration (optional for some services)
+	lokiURL := GetEnv("LOKI_URL", "")
+	if lokiURL != "" {
+		v.ValidateURL("LOKI_URL", lokiURL)
+	}
 
 	// Redis configuration
 	redisURL := GetEnv("REDIS_URL", "redis://localhost:6379")
 	v.ValidateURL("REDIS_URL", redisURL)
 
 	// Port configuration
-	apiPort := GetEnv("API_PORT", "8080")
-	v.ValidatePort("API_PORT", apiPort)
+	apiPort := GetEnv("API_PORT", "")
+	if apiPort != "" {
+		v.ValidatePort("API_PORT", apiPort)
+	}
 
-	wsPort := GetEnv("WS_PORT", "8081")
-	v.ValidatePort("WS_PORT", wsPort)
+	wsPort := GetEnv("WS_PORT", "")
+	if wsPort != "" {
+		v.ValidatePort("WS_PORT", wsPort)
+	}
 
-	grpcPort := GetEnv("GRPC_PORT", "50051")
-	v.ValidatePort("GRPC_PORT", grpcPort)
-
-	// Security configuration
-	jwtSecret := GetEnv("JWT_SECRET", "")
-	if environment == "production" {
-		if jwtSecret == "" {
-			v.errors = append(v.errors, ValidationError{
-				Field:   "JWT_SECRET",
-				Message: "required in production. Generate with: openssl rand -base64 32",
-			})
-		} else {
-			v.ValidateMinLength("JWT_SECRET", jwtSecret, 32)
-		}
+	grpcPort := GetEnv("GRPC_PORT", "")
+	if grpcPort != "" {
+		v.ValidatePort("GRPC_PORT", grpcPort)
 	}
 
 	// Encryption key (required in production)
@@ -202,8 +228,23 @@ func ValidateConfig() error {
 	// Log level validation
 	logLevel := GetEnv("LOG_LEVEL", "info")
 	v.ValidateEnum("LOG_LEVEL", logLevel, []string{"debug", "info", "warn", "error", "fatal"})
+}
 
-	// CORS configuration warning
+func validateAuthServices(v *ConfigValidator, environment string) {
+	// Security configuration - only for services that handle authentication
+	jwtSecret := GetEnv("JWT_SECRET", "")
+	if environment == "production" {
+		if jwtSecret == "" {
+			v.errors = append(v.errors, ValidationError{
+				Field:   "JWT_SECRET",
+				Message: "required in production. Generate with: openssl rand -base64 32",
+			})
+		} else {
+			v.ValidateMinLength("JWT_SECRET", jwtSecret, 32)
+		}
+	}
+
+	// CORS configuration - only for HTTP services
 	corsOrigins := GetEnv("CORS_ORIGINS", "")
 	if environment == "production" && corsOrigins == "" {
 		v.errors = append(v.errors, ValidationError{
@@ -211,6 +252,4 @@ func ValidateConfig() error {
 			Message: "should be set in production to restrict access",
 		})
 	}
-
-	return v.Errors()
 }

@@ -27,7 +27,7 @@ func main() {
 
 	// Validate environment configuration
 	log.Println("Validating environment configuration...")
-	if err := config.ValidateConfig(); err != nil {
+	if err := config.ValidateConfigForService(config.ServiceTypeAIWorker); err != nil {
 		log.Printf("Configuration validation warnings/errors:\n%v", err)
 		environment := config.GetEnv("ENVIRONMENT", "development")
 		if environment == "production" {

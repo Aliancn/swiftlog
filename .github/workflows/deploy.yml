@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Docker image version to deploy (e.g., 0.1.0, latest)'
+        description: "Docker image version to deploy (e.g., 0.1.0, latest)"
         required: true
-        default: 'latest'
+        default: "latest"
         type: string
       environment:
-        description: 'Deployment environment'
+        description: "Deployment environment"
         type: choice
         options: [production, staging]
         default: production
@@ -145,8 +145,16 @@ jobs:
             [ -z "$ENCRYPTION_KEY" ] && echo "ERROR: ENCRYPTION_KEY is required" && exit 1
             [ -z "$ADMIN_PASSWORD" ] && echo "ERROR: ADMIN_PASSWORD is required" && exit 1
 
-            # Set CORS_ORIGINS to PUBLIC_URL if not set
-            [ -z "$CORS_ORIGINS" ] && [ -n "$PUBLIC_URL" ] && export CORS_ORIGINS="$PUBLIC_URL"
+            # Set CORS_ORIGINS to PUBLIC_URL if not set, or use a safe default
+            if [ -z "$CORS_ORIGINS" ]; then
+              if [ -n "$PUBLIC_URL" ]; then
+                export CORS_ORIGINS="$PUBLIC_URL"
+              else
+                # Default to allowing requests from the same host
+                export CORS_ORIGINS="http://localhost,http://127.0.0.1"
+                echo "WARNING: CORS_ORIGINS not set and PUBLIC_URL is empty. Using default: $CORS_ORIGINS"
+              fi
+            fi
 
             # Create .env file from environment variables
             echo "Creating .env file from GitHub secrets..."
@@ -246,4 +254,3 @@ jobs:
 
             echo "=== Health checks passed ==="
             echo "Deployment successful!"
-
