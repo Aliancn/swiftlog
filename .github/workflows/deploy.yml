@@ -34,9 +34,11 @@ jobs:
       - name: Prepare deployment
         run: |
           mkdir -p deploy/nginx
+          mkdir -p deploy/backend/migrations
           cp docker-compose.yaml deploy/
           cp loki-config.yaml deploy/
           cp nginx/nginx.conf deploy/nginx/
+          cp backend/migrations/*.sql deploy/backend/migrations/
 
           cat > deploy/update.sh << 'EOF'
           #!/bin/bash
@@ -58,6 +60,36 @@ jobs:
           sleep 30
           echo "Service status:"
           docker compose ps
+
+          # Run database migrations
+          echo "Running database migrations..."
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" > /dev/null 2>&1; then
+              echo "✓ PostgreSQL is ready"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "ERROR: PostgreSQL failed to become ready"
+              exit 1
+            fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 2
+          done
+
+          # Apply migrations in order
+          for migration_file in backend/migrations/*.sql; do
+            if [ -f "$migration_file" ]; then
+              echo "Applying migration: $(basename $migration_file)"
+              if docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$migration_file" 2>&1 | grep -v "already exists\|skipping"; then
+                echo "✓ Migration applied: $(basename $migration_file)"
+              else
+                echo "⚠ Migration skipped or already applied: $(basename $migration_file)"
+              fi
+            fi
+          done
+          echo "✓ Database migrations completed"
+
           echo "Checking container logs for errors..."
           docker compose logs --tail=50
           EOF
@@ -234,6 +266,7 @@ jobs:
               echo "WARNING: Unhealthy containers detected: $UNHEALTHY"
             fi
 
+
             # Test nginx endpoint
             echo "Testing nginx health endpoint..."
             if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/health | grep -q "200"; then
@@ -245,7 +278,7 @@ jobs:
 
             # Test API endpoint
             echo "Testing API health endpoint..."
-            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/api/v1/health | grep -q "200"; then
+            if ! curl -f -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/api/health | grep -q "200"; then
               echo "ERROR: API health check failed"
               docker compose logs api
               exit 1
