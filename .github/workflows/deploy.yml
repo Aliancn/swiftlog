@@ -86,6 +86,8 @@ jobs:
         run: |
           cd deploy
           VERSION=${{ steps.version.outputs.version }}
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           # Comment out build sections and add image lines
           sed -i 's/^    build:$/    #build:/' docker-compose.yaml
           sed -i 's/^      context:/      #context:/' docker-compose.yaml
@@ -94,11 +96,11 @@ jobs:
           sed -i 's/^      args:$/      #args:/' docker-compose.yaml
           sed -i 's/^        NEXT_PUBLIC/#        NEXT_PUBLIC/' docker-compose.yaml
           # Add image lines for each service
-          sed -i '/container_name: swiftlog_ingestor/a\    image: ghcr.io/${{ github.repository }}/ingestor:'"${VERSION}" docker-compose.yaml
-          sed -i '/container_name: swiftlog_api/a\    image: ghcr.io/${{ github.repository }}/api:'"${VERSION}" docker-compose.yaml
-          sed -i '/container_name: swiftlog_websocket/a\    image: ghcr.io/${{ github.repository }}/websocket:'"${VERSION}" docker-compose.yaml
-          sed -i '/container_name: swiftlog_ai_worker/a\    image: ghcr.io/${{ github.repository }}/ai-worker:'"${VERSION}" docker-compose.yaml
-          sed -i '/container_name: swiftlog_frontend/a\    image: ghcr.io/${{ github.repository }}/frontend:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_ingestor/a\    image: ghcr.io/'"${REPO_LOWER}"'/ingestor:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_api/a\    image: ghcr.io/'"${REPO_LOWER}"'/api:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_websocket/a\    image: ghcr.io/'"${REPO_LOWER}"'/websocket:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_ai_worker/a\    image: ghcr.io/'"${REPO_LOWER}"'/ai-worker:'"${VERSION}" docker-compose.yaml
+          sed -i '/container_name: swiftlog_frontend/a\    image: ghcr.io/'"${REPO_LOWER}"'/frontend:'"${VERSION}" docker-compose.yaml
           # Verify the changes
           echo "Modified docker-compose.yaml:"
           grep -A 2 "image: ghcr.io" docker-compose.yaml || true
