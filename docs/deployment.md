@@ -1,3 +1,10 @@
+---
+layout: default
+title: Deployment
+nav_order: 7
+description: "Production deployment guide for SwiftLog"
+---
+
 # SwiftLog Deployment Guide
 
 本文档说明如何部署SwiftLog到生产环境。
